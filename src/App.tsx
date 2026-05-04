@@ -30,7 +30,7 @@ export default function App() {
   useEffect(() => {
     const tabs = state.tabs;
     return () => {
-      tabs.forEach((tab) => invoke("close_tab", { tabId: tab.id }).catch(() => {}));
+      tabs.forEach((tab) => invoke("close_tab", { tabId: tab.id }).catch(console.error));
     };
   }, []); // intentional: cleanup on unmount only
 
