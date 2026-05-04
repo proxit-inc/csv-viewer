@@ -35,7 +35,7 @@ pub fn get_csv_data_range(
     let rows: Vec<Vec<String>> = stmt
         .query_map([], |row| {
             let cells: Vec<String> = (0..col_count)
-                .map(|i| row.get::<_, Option<String>>(i).unwrap_or(None).unwrap_or_default())
+                .map(|i| row.get::<_, Option<String>>(i).ok().flatten().unwrap_or_default())
                 .collect();
             Ok(cells)
         })
