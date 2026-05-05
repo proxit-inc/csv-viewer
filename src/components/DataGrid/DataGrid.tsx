@@ -116,9 +116,9 @@ export function DataGrid({
   const onGridReady = (params: GridReadyEvent) => {
     params.api.setGridOption("datasource", datasource);
     if (initialScrollOffset > 0) {
-      // Suppress onBodyScroll updates for 300 ms so the restoration scroll
-      // cannot overwrite currentScrollRowRef with a slightly-off value.
-      ignoreScrollUntilRef.current = Date.now() + 300;
+      // Suppress scroll-end saves for 500 ms so the restoration scroll
+      // does not overwrite state with a slightly-off value.
+      ignoreScrollUntilRef.current = Date.now() + 500;
       currentScrollRowRef.current = initialScrollOffset;
       params.api.ensureIndexVisible(initialScrollOffset, "top");
     }
@@ -164,8 +164,17 @@ export function DataGrid({
         enableCellTextSelection={true}
         onGridReady={onGridReady}
         onBodyScroll={(e) => {
+          // Keep ref in sync for the unmount-save fallback (tab switch mid-scroll).
           if (Date.now() <= ignoreScrollUntilRef.current) return;
           currentScrollRowRef.current = e.api.getFirstDisplayedRowIndex();
+        }}
+        onBodyScrollEnd={(e) => {
+          // Save to state immediately when the user stops scrolling so the
+          // next restoration is always based on the accurate settled position.
+          if (Date.now() <= ignoreScrollUntilRef.current) return;
+          const row = e.api.getFirstDisplayedRowIndex();
+          currentScrollRowRef.current = row;
+          onScrollSaveRef.current(tabIdRef.current, row);
         }}
       />
     </div>
