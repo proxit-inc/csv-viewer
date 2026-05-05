@@ -14,7 +14,7 @@ interface DataGridProps {
   searchHits: SearchHit[];
   currentHitIndex: number;
   initialScrollOffset?: number;
-  onScrollSave: (offset: number) => void;
+  onScrollSave: (tabId: string, offset: number) => void;
 }
 
 export function DataGrid({
@@ -48,9 +48,11 @@ export function DataGrid({
     }
   }, [searchHits, currentHitIndex]);
 
+  // Always save using this DataGrid's own tabId, never from a parent closure
+  // that could point to a different active tab after a switch.
   const handleScrollSave = useCallback(
-    (offset: number) => onScrollSave(offset),
-    [onScrollSave]
+    (offset: number) => onScrollSave(tabId, offset),
+    [onScrollSave, tabId]
   );
   const debouncedScrollSave = useDebounce(handleScrollSave, 200);
 

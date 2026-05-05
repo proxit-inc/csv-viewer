@@ -30,6 +30,12 @@ export default function App() {
     [dispatch]
   );
 
+  const handleScrollSave = useCallback(
+    (tabId: string, offset: number) =>
+      dispatch({ type: "TAB_SCROLL_SAVE", payload: { tabId, offset } }),
+    [dispatch]
+  );
+
   useEffect(() => {
     const tabs = state.tabs;
     return () => {
@@ -95,9 +101,7 @@ export default function App() {
         searchHits={activeTab.searchHits}
         currentHitIndex={activeTab.searchHitIndex}
         initialScrollOffset={activeTab.scrollOffset}
-        onScrollSave={(offset) =>
-          dispatch({ type: "TAB_SCROLL_SAVE", payload: { tabId: activeTab.id, offset } })
-        }
+        onScrollSave={handleScrollSave}
       />
     );
   };
