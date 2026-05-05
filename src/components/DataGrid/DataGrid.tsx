@@ -1,6 +1,6 @@
 import { useMemo, useEffect, useRef, useCallback } from "react";
 import { AgGridReact } from "ag-grid-react";
-import type { ColDef, GridReadyEvent } from "ag-grid-community";
+import type { ColDef, GridReadyEvent, CellStyleParams } from "ag-grid-community";
 import "ag-grid-community/styles/ag-grid.css";
 import "ag-grid-community/styles/ag-theme-alpine.css";
 import type { SearchHit } from "../../types";
@@ -21,11 +21,32 @@ export function DataGrid({
   headers,
   totalRows,
   tabId,
+  searchHits,
+  currentHitIndex,
   initialScrollOffset = 0,
   onScrollSave,
 }: DataGridProps) {
   const gridRef = useRef<AgGridReact>(null);
   const datasource = useMemo(() => createDatasource(tabId), [tabId]);
+
+  // Use refs so cellStyle callbacks can read current hit state without
+  // triggering columnDef recreation on every search update.
+  const searchHitsRef = useRef<SearchHit[]>(searchHits);
+  const currentHitIndexRef = useRef<number>(currentHitIndex);
+
+  useEffect(() => {
+    searchHitsRef.current = searchHits;
+    currentHitIndexRef.current = currentHitIndex;
+
+    const api = gridRef.current?.api;
+    if (!api) return;
+
+    api.refreshCells({ force: true });
+
+    if (searchHits.length > 0 && currentHitIndex >= 0) {
+      api.ensureIndexVisible(searchHits[currentHitIndex].row, "middle");
+    }
+  }, [searchHits, currentHitIndex]);
 
   const handleScrollSave = useCallback(
     (offset: number) => onScrollSave(offset),
@@ -60,9 +81,20 @@ export function DataGrid({
         resizable: true,
         sortable: false,
         filter: false,
-        cellStyle: {
-          fontFamily: "var(--font-mono)",
-          fontSize: "12px",
+        cellStyle: (params: CellStyleParams) => {
+          const base = { fontFamily: "var(--font-mono)", fontSize: "12px" };
+          const rowIdx = params.rowIndex;
+          const hits = searchHitsRef.current;
+          const curIdx = currentHitIndexRef.current;
+          const currentHit = hits[curIdx];
+
+          if (currentHit?.row === rowIdx && currentHit?.column === idx) {
+            return { ...base, backgroundColor: "#FDE68A", color: "#92400E" };
+          }
+          if (hits.some((h) => h.row === rowIdx && h.column === idx)) {
+            return { ...base, backgroundColor: "#FEF9C3" };
+          }
+          return base;
         },
       })),
     ],
