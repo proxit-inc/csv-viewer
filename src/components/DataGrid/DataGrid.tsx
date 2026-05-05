@@ -1,11 +1,10 @@
 import { useMemo, useEffect, useRef, useCallback } from "react";
 import { AgGridReact } from "ag-grid-react";
-import type { ColDef, GridReadyEvent, CellStyleParams } from "ag-grid-community";
+import type { ColDef, GridReadyEvent, CellClassParams } from "ag-grid-community";
 import "ag-grid-community/styles/ag-grid.css";
 import "ag-grid-community/styles/ag-theme-alpine.css";
 import type { SearchHit } from "../../types";
 import { createDatasource } from "./datasource";
-import { useDebounce } from "../../hooks/useDebounce";
 
 interface DataGridProps {
   headers: string[];
@@ -29,8 +28,27 @@ export function DataGrid({
   const gridRef = useRef<AgGridReact>(null);
   const datasource = useMemo(() => createDatasource(tabId), [tabId]);
 
-  // Use refs so cellStyle callbacks can read current hit state without
-  // triggering columnDef recreation on every search update.
+  // Always-fresh refs for the unmount cleanup (avoids stale-closure issues).
+  const onScrollSaveRef = useRef(onScrollSave);
+  const tabIdRef = useRef(tabId);
+  useEffect(() => {
+    onScrollSaveRef.current = onScrollSave;
+    tabIdRef.current = tabId;
+  });
+
+  // Track the current first-visible row in a ref only — no state, no re-renders.
+  // Initialized to initialScrollOffset so an immediate unmount saves correctly.
+  const currentScrollRowRef = useRef(initialScrollOffset);
+
+  // Save once on unmount (tab switch or close). Reading the ref is safe regardless
+  // of AG Grid's own cleanup order because the ref lives in DataGrid, not in the grid.
+  useEffect(() => {
+    return () => {
+      onScrollSaveRef.current(tabIdRef.current, currentScrollRowRef.current);
+    };
+  }, []); // intentional: run cleanup only on unmount
+
+  // Search hit highlighting via refs to avoid recreating columnDefs on every update.
   const searchHitsRef = useRef<SearchHit[]>(searchHits);
   const currentHitIndexRef = useRef<number>(currentHitIndex);
 
@@ -47,14 +65,6 @@ export function DataGrid({
       api.ensureIndexVisible(searchHits[currentHitIndex].row, "middle");
     }
   }, [searchHits, currentHitIndex]);
-
-  // Always save using this DataGrid's own tabId, never from a parent closure
-  // that could point to a different active tab after a switch.
-  const handleScrollSave = useCallback(
-    (offset: number) => onScrollSave(tabId, offset),
-    [onScrollSave, tabId]
-  );
-  const debouncedScrollSave = useDebounce(handleScrollSave, 200);
 
   const columnDefs = useMemo<ColDef[]>(
     () => [
@@ -83,7 +93,7 @@ export function DataGrid({
         resizable: true,
         sortable: false,
         filter: false,
-        cellStyle: (params: CellStyleParams) => {
+        cellStyle: (params: CellClassParams) => {
           const base = { fontFamily: "var(--font-mono)", fontSize: "12px" };
           const rowIdx = params.rowIndex;
           const hits = searchHitsRef.current;
@@ -103,18 +113,20 @@ export function DataGrid({
     [headers]
   );
 
-  // Skip the onBodyScroll that fires immediately after programmatic restoration
-  // so the restored position is never written back (which would drift each switch).
-  const skipNextScrollRef = useRef(false);
-
   const onGridReady = (params: GridReadyEvent) => {
     params.api.setGridOption("datasource", datasource);
-    if (initialScrollOffset > 0) {
-      skipNextScrollRef.current = true;
-      // "top" makes the saved row the first visible row — deterministic restoration.
-      params.api.ensureIndexVisible(initialScrollOffset, "top");
-    }
   };
+
+  // Restore scroll position after the first data block has rendered.
+  // Using onFirstDataRendered (not onGridReady) ensures the grid can actually
+  // scroll — in Infinite Row Model, ensureIndexVisible before data loads is a no-op.
+  const onFirstDataRendered = useCallback(() => {
+    if (initialScrollOffset > 0 && gridRef.current?.api) {
+      gridRef.current.api.ensureIndexVisible(initialScrollOffset, "top");
+      // Sync ref so an immediate unmount after restore saves the right row.
+      currentScrollRowRef.current = initialScrollOffset;
+    }
+  }, [initialScrollOffset]);
 
   useEffect(() => {
     gridRef.current?.api?.setGridOption("datasource", datasource);
@@ -155,12 +167,11 @@ export function DataGrid({
         suppressCellFocus={true}
         enableCellTextSelection={true}
         onGridReady={onGridReady}
+        onFirstDataRendered={onFirstDataRendered}
         onBodyScroll={(e) => {
-          if (skipNextScrollRef.current) {
-            skipNextScrollRef.current = false;
-            return;
-          }
-          debouncedScrollSave(e.api.getFirstDisplayedRowIndex());
+          // Update ref only — no state dispatch, no debounce.
+          // The ref value is flushed to state exactly once on unmount.
+          currentScrollRowRef.current = e.api.getFirstDisplayedRowIndex();
         }}
       />
     </div>
