@@ -1,0 +1,68 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* Font */
+  --font-sans: "SF Pro Text", -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono: "SF Mono", "Cascadia Code", Consolas, monospace;
+
+  /* Neutral */
+  --col-bg:       #ffffff;
+  --col-surface:  #f5f5f5;
+  --col-surface2: #ebebeb;
+  --col-border:   #d6d6d6;
+  --col-border2:  #c4c4c4;
+  --col-text:     #1a1a1a;
+  --col-text2:    #555555;
+  --col-text3:    #888888;
+
+  /* Accent */
+  --col-accent:       #2563eb;
+  --col-accent-light: #eff6ff;
+  --col-accent-hover: #1d4ed8;
+
+  /* Grid */
+  --col-header-bg:    #f0f0f0;
+  --col-row-odd:      #fafafa;
+  --col-row-even:     #ffffff;
+  --col-row-hover:    #f0f5ff;
+  --col-row-selected: #dbeafe;
+  --col-row-num:      #f5f5f5;
+  --col-cell-border:  #e8e8e8;
+
+  /* Heights */
+  --h-titlebar:   38px;
+  --h-toolbar:    44px;
+  --h-tab:        34px;
+  --h-fileinfo:   28px;
+  --h-searchbar:  38px;
+  --h-header-row: 34px;
+  --h-data-row:   28px;
+  --h-statusbar:  24px;
+  --w-row-num:    52px;
+}
+
+* {
+  box-sizing: border-box;
+  -webkit-font-smoothing: antialiased;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  font-family: var(--font-sans);
+  background: var(--col-bg);
+  color: var(--col-text);
+  user-select: none;
+}
+
+.app-shell {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
