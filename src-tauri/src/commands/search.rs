@@ -46,11 +46,15 @@ pub fn search_csv(
 
     for (col_idx, col_name) in headers.iter().enumerate() {
         let col_escaped = col_name.replace('"', "\"\"");
+        // Compute row numbers over the full table first, then filter.
+        // row_number() OVER () after WHERE would give sequential numbers
+        // for matched rows only (0,1,2...) instead of original positions.
         let sql = format!(
-            "SELECT (row_number() OVER ()) - 1 AS rn \
-             FROM csv_data \
-             WHERE CAST(\"{col_escaped}\" AS VARCHAR) LIKE '%{escaped}%' ESCAPE '\\' \
-             LIMIT {MAX_SEARCH_HITS}"
+            "SELECT rn FROM (\
+                SELECT (row_number() OVER () - 1) AS rn, \"{col_escaped}\" \
+                FROM csv_data\
+            ) WHERE CAST(\"{col_escaped}\" AS VARCHAR) LIKE '%{escaped}%' ESCAPE '\\' \
+            LIMIT {MAX_SEARCH_HITS}"
         );
 
         let mut stmt = conn.prepare(&sql).map_err(|e| e.to_string())?;
