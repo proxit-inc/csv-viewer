@@ -1,4 +1,4 @@
-import { useMemo, useEffect, useRef, useCallback } from "react";
+import { useMemo, useEffect, useRef } from "react";
 import { AgGridReact } from "ag-grid-react";
 import type { ColDef, GridReadyEvent, CellClassParams } from "ag-grid-community";
 import "ag-grid-community/styles/ag-grid.css";
@@ -28,7 +28,7 @@ export function DataGrid({
   const gridRef = useRef<AgGridReact>(null);
   const datasource = useMemo(() => createDatasource(tabId), [tabId]);
 
-  // Always-fresh refs for the unmount cleanup (avoids stale-closure issues).
+  // Always-fresh refs so the unmount cleanup never holds stale values.
   const onScrollSaveRef = useRef(onScrollSave);
   const tabIdRef = useRef(tabId);
   useEffect(() => {
@@ -36,19 +36,21 @@ export function DataGrid({
     tabIdRef.current = tabId;
   });
 
-  // Track the current first-visible row in a ref only — no state, no re-renders.
+  // Tracks the first visible row. Updated by onBodyScroll (ref-only, no renders).
   // Initialized to initialScrollOffset so an immediate unmount saves correctly.
   const currentScrollRowRef = useRef(initialScrollOffset);
 
-  // Save once on unmount (tab switch or close). Reading the ref is safe regardless
-  // of AG Grid's own cleanup order because the ref lives in DataGrid, not in the grid.
-  useEffect(() => {
-    return () => {
-      onScrollSaveRef.current(tabIdRef.current, currentScrollRowRef.current);
-    };
-  }, []); // intentional: run cleanup only on unmount
+  // Timestamp until which onBodyScroll updates are suppressed.
+  // Set during scroll restoration to avoid overwriting the intended offset.
+  const ignoreScrollUntilRef = useRef(0);
 
-  // Search hit highlighting via refs to avoid recreating columnDefs on every update.
+  // Save exactly once on unmount (tab switch or close).
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => () => {
+    onScrollSaveRef.current(tabIdRef.current, currentScrollRowRef.current);
+  }, []);
+
+  // Search hit highlighting — refs avoid recreating columnDefs on every update.
   const searchHitsRef = useRef<SearchHit[]>(searchHits);
   const currentHitIndexRef = useRef<number>(currentHitIndex);
 
@@ -58,9 +60,7 @@ export function DataGrid({
 
     const api = gridRef.current?.api;
     if (!api) return;
-
     api.refreshCells({ force: true });
-
     if (searchHits.length > 0 && currentHitIndex >= 0) {
       api.ensureIndexVisible(searchHits[currentHitIndex].row, "middle");
     }
@@ -115,18 +115,14 @@ export function DataGrid({
 
   const onGridReady = (params: GridReadyEvent) => {
     params.api.setGridOption("datasource", datasource);
-  };
-
-  // Restore scroll position after the first data block has rendered.
-  // Using onFirstDataRendered (not onGridReady) ensures the grid can actually
-  // scroll — in Infinite Row Model, ensureIndexVisible before data loads is a no-op.
-  const onFirstDataRendered = useCallback(() => {
-    if (initialScrollOffset > 0 && gridRef.current?.api) {
-      gridRef.current.api.ensureIndexVisible(initialScrollOffset, "top");
-      // Sync ref so an immediate unmount after restore saves the right row.
+    if (initialScrollOffset > 0) {
+      // Suppress onBodyScroll updates for 300 ms so the restoration scroll
+      // cannot overwrite currentScrollRowRef with a slightly-off value.
+      ignoreScrollUntilRef.current = Date.now() + 300;
       currentScrollRowRef.current = initialScrollOffset;
+      params.api.ensureIndexVisible(initialScrollOffset, "top");
     }
-  }, [initialScrollOffset]);
+  };
 
   useEffect(() => {
     gridRef.current?.api?.setGridOption("datasource", datasource);
@@ -167,10 +163,8 @@ export function DataGrid({
         suppressCellFocus={true}
         enableCellTextSelection={true}
         onGridReady={onGridReady}
-        onFirstDataRendered={onFirstDataRendered}
         onBodyScroll={(e) => {
-          // Update ref only — no state dispatch, no debounce.
-          // The ref value is flushed to state exactly once on unmount.
+          if (Date.now() <= ignoreScrollUntilRef.current) return;
           currentScrollRowRef.current = e.api.getFirstDisplayedRowIndex();
         }}
       />
