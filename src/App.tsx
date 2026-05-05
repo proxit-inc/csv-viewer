@@ -1,5 +1,6 @@
-import { useReducer, useEffect, useCallback } from "react";
+import { useReducer, useEffect, useCallback, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { v4 as uuid } from "uuid";
 import { appReducer, initialState } from "./store/appReducer";
 import { TitleBar } from "./components/TitleBar";
@@ -36,6 +37,27 @@ export default function App() {
     };
   }, []); // intentional: cleanup on unmount only
 
+  // Global drag-and-drop: register once so listener never accumulates.
+  // openFileRef lets the closure always call the latest openFile without
+  // re-registering the listener on every render.
+  const openFileRef = useRef(openFile);
+  useEffect(() => { openFileRef.current = openFile; }, [openFile]);
+
+  useEffect(() => {
+    const CSV_EXTS = ["csv", "tsv", "txt"];
+    let unlisten: (() => void) | undefined;
+    getCurrentWebview()
+      .onDragDropEvent((event) => {
+        if (event.payload.type !== "drop") return;
+        event.payload.paths.forEach((path) => {
+          const ext = path.split(".").pop()?.toLowerCase() ?? "";
+          if (CSV_EXTS.includes(ext)) openFileRef.current(uuid(), path);
+        });
+      })
+      .then((fn) => { unlisten = fn; });
+    return () => unlisten?.();
+  }, []); // single registration for the lifetime of the app
+
   useKeyboardShortcuts({
     onOpen: () => openFile(uuid()),
     onSearch: () => dispatch({ type: "SEARCH_OPEN" }),
@@ -50,10 +72,7 @@ export default function App() {
   const renderContent = () => {
     if (!activeTab) {
       return (
-        <EmptyState
-          onOpen={() => openFile(uuid())}
-          onDrop={(path) => openFile(uuid(), path)}
-        />
+        <EmptyState onOpen={() => openFile(uuid())} />
       );
     }
     if (activeTab.isLoading || !activeTab.metadata) {

@@ -1,33 +1,10 @@
-import { useEffect } from "react";
-import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { FileSpreadsheet } from "lucide-react";
 
 interface EmptyStateProps {
   onOpen: () => void;
-  onDrop: (path: string) => void;
 }
 
-export function EmptyState({ onOpen, onDrop }: EmptyStateProps) {
-  useEffect(() => {
-    let unlisten: (() => void) | undefined;
-
-    getCurrentWebview()
-      .onDragDropEvent((event) => {
-        if (event.payload.type === "drop") {
-          const csvExts = ["csv", "tsv", "txt"];
-          event.payload.paths.forEach((path) => {
-            const ext = path.split(".").pop()?.toLowerCase() ?? "";
-            if (csvExts.includes(ext)) onDrop(path);
-          });
-        }
-      })
-      .then((fn) => {
-        unlisten = fn;
-      });
-
-    return () => unlisten?.();
-  }, [onDrop]);
-
+export function EmptyState({ onOpen }: EmptyStateProps) {
   return (
     <div
       className="flex flex-col items-center justify-center flex-1 gap-4"
