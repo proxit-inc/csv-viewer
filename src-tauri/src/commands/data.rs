@@ -25,6 +25,10 @@ pub fn get_csv_data_range(
         .query_row("SELECT COUNT(*) FROM csv_data", [], |r| r.get(0))
         .map_err(|e| e.to_string())?;
 
+    let col_count: usize = conn
+        .query_row("SELECT COUNT(*) FROM (DESCRIBE csv_data)", [], |r| r.get(0))
+        .map_err(|e| e.to_string())?;
+
     let mut stmt = conn
         .prepare(&format!(
             "SELECT * FROM csv_data LIMIT {} OFFSET {}",
@@ -32,12 +36,15 @@ pub fn get_csv_data_range(
         ))
         .map_err(|e| e.to_string())?;
 
-    let col_count = stmt.column_count();
-
     let rows: Vec<Vec<String>> = stmt
         .query_map([], |row| {
             let cells: Vec<String> = (0..col_count)
-                .map(|i| row.get::<_, Option<String>>(i).ok().flatten().unwrap_or_default())
+                .map(|i| {
+                    row.get::<_, Option<String>>(i)
+                        .ok()
+                        .flatten()
+                        .unwrap_or_default()
+                })
                 .collect();
             Ok(cells)
         })
