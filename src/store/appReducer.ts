@@ -4,6 +4,7 @@ export const initialState: AppState = {
   tabs: [],
   activeTabId: null,
   isSearchOpen: false,
+  errorMessage: null,
 };
 
 export function appReducer(state: AppState, action: AppAction): AppState {
@@ -89,6 +90,12 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         ),
       };
     }
+
+    case "SET_ERROR":
+      return { ...state, errorMessage: action.payload };
+
+    case "CLEAR_ERROR":
+      return { ...state, errorMessage: null };
 
     default:
       return state;

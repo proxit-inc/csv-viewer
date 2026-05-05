@@ -32,7 +32,7 @@ pub fn open_csv_file(
     let escaped_path = path.replace('\'', "''");
     conn.execute_batch(&format!(
         "CREATE TABLE csv_data AS \
-         SELECT * FROM read_csv('{}', delim='{}', header=true, ignore_errors=true, all_varchar=true)",
+         SELECT * FROM read_csv_auto('{}', delim='{}', header=true, ignore_errors=true)",
         escaped_path, delim_str
     ))
     .map_err(|e| format!("DuckDB load error: {}", e))?;

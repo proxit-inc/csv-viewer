@@ -40,6 +40,7 @@ export interface AppState {
   tabs: CsvTab[];
   activeTabId: string | null;
   isSearchOpen: boolean;
+  errorMessage: string | null;
 }
 
 export type AppAction =
@@ -51,4 +52,6 @@ export type AppAction =
   | { type: "SEARCH_OPEN" }
   | { type: "SEARCH_CLOSE" }
   | { type: "SEARCH_UPDATE"; payload: { tabId: string; query: string; hits: SearchHit[] } }
-  | { type: "SEARCH_NAVIGATE"; payload: { tabId: string; index: number } };
+  | { type: "SEARCH_NAVIGATE"; payload: { tabId: string; index: number } }
+  | { type: "SET_ERROR"; payload: string }
+  | { type: "CLEAR_ERROR" };

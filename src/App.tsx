@@ -9,7 +9,9 @@ import { FileInfoBar } from "./components/FileInfoBar";
 import { SearchBar } from "./components/SearchBar";
 import { DataGrid } from "./components/DataGrid/DataGrid";
 import { EmptyState } from "./components/EmptyState";
+import { LoadingState } from "./components/LoadingState";
 import { StatusBar } from "./components/StatusBar";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 import { useFileOpen } from "./hooks/useFileOpen";
 import { useKeyboardShortcuts } from "./hooks/useKeyboardShortcuts";
 
@@ -30,7 +32,7 @@ export default function App() {
   useEffect(() => {
     const tabs = state.tabs;
     return () => {
-      tabs.forEach((tab) => invoke("close_tab", { tabId: tab.id }).catch(console.error));
+      tabs.forEach((tab) => invoke("close_tab", { tabId: tab.id }).catch(() => {}));
     };
   }, []); // intentional: cleanup on unmount only
 
@@ -45,6 +47,34 @@ export default function App() {
     },
   });
 
+  const renderContent = () => {
+    if (!activeTab) {
+      return (
+        <EmptyState
+          onOpen={() => openFile(uuid())}
+          onDrop={(path) => openFile(uuid(), path)}
+        />
+      );
+    }
+    if (activeTab.isLoading || !activeTab.metadata) {
+      return <LoadingState filename={activeTab.filename} />;
+    }
+    return (
+      <DataGrid
+        key={activeTab.id}
+        headers={activeTab.metadata.headers}
+        totalRows={activeTab.metadata.totalRows}
+        tabId={activeTab.id}
+        searchHits={activeTab.searchHits}
+        currentHitIndex={activeTab.searchHitIndex}
+        initialScrollOffset={activeTab.scrollOffset}
+        onScrollSave={(offset) =>
+          dispatch({ type: "TAB_SCROLL_SAVE", payload: { tabId: activeTab.id, offset } })
+        }
+      />
+    );
+  };
+
   return (
     <div className="app-shell">
       <TitleBar filename={activeTab?.filename ?? null} />
@@ -52,7 +82,7 @@ export default function App() {
       <Toolbar
         onOpen={() => openFile(uuid())}
         onSearch={() => dispatch({ type: "SEARCH_OPEN" })}
-        hasFile={!!activeTab}
+        hasFile={!!activeTab?.metadata}
       />
 
       <TabBar
@@ -65,7 +95,7 @@ export default function App() {
 
       {activeTab?.metadata && <FileInfoBar metadata={activeTab.metadata} />}
 
-      {state.isSearchOpen && activeTab && (
+      {state.isSearchOpen && activeTab?.metadata && (
         <SearchBar
           tabId={activeTab.id}
           query={activeTab.searchQuery}
@@ -76,25 +106,22 @@ export default function App() {
         />
       )}
 
-      {activeTab?.metadata ? (
-        <DataGrid
-          key={activeTab.id}
-          headers={activeTab.metadata.headers}
-          totalRows={activeTab.metadata.totalRows}
-          tabId={activeTab.id}
-          searchHits={activeTab.searchHits}
-          currentHitIndex={activeTab.searchHitIndex}
-          initialScrollOffset={activeTab.scrollOffset}
-          onScrollSave={(offset) =>
-            dispatch({ type: "TAB_SCROLL_SAVE", payload: { tabId: activeTab.id, offset } })
-          }
-        />
-      ) : (
-        <EmptyState
-          onOpen={() => openFile(uuid())}
-          onDrop={(path) => openFile(uuid(), path)}
-        />
+      {state.errorMessage && (
+        <div
+          className="flex items-center justify-between px-3 py-2 text-xs border-b shrink-0"
+          style={{ background: "#FEF2F2", borderColor: "#FECACA", color: "#991B1B" }}
+        >
+          <span>{state.errorMessage}</span>
+          <button
+            onClick={() => dispatch({ type: "CLEAR_ERROR" })}
+            className="ml-4 underline shrink-0"
+          >
+            Dismiss
+          </button>
+        </div>
       )}
+
+      <ErrorBoundary>{renderContent()}</ErrorBoundary>
 
       <StatusBar activeTab={activeTab} tabCount={state.tabs.length} />
     </div>

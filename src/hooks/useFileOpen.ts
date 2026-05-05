@@ -34,8 +34,10 @@ export function useFileOpen(dispatch: React.Dispatch<AppAction>) {
       const metadata = await invoke<FileMetadata>("open_csv_file", { path, tabId });
       dispatch({ type: "TAB_METADATA_LOADED", payload: { tabId, metadata } });
     } catch (err) {
-      console.error("Failed to open file:", err);
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error("Failed to open file:", msg);
       dispatch({ type: "TAB_CLOSE", payload: { tabId } });
+      dispatch({ type: "SET_ERROR", payload: `Failed to open file: ${msg}` });
     }
   };
 
