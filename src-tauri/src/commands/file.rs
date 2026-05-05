@@ -29,8 +29,7 @@ pub fn open_csv_file(
     let sample_len = decoded.len().min(DELIMITER_SAMPLE_BYTES);
     let delimiter = detect_delimiter(&decoded[..sample_len]);
 
-    let conn =
-        Connection::open_in_memory().map_err(|e| format!("DuckDB init error: {}", e))?;
+    let conn = Connection::open_in_memory().map_err(|e| format!("DuckDB init error: {}", e))?;
 
     let delim_str = match delimiter {
         '\t' => "\\t".to_string(),
@@ -41,7 +40,7 @@ pub fn open_csv_file(
     let escaped_path = path.replace('\'', "''");
     conn.execute_batch(&format!(
         "CREATE TABLE csv_data AS \
-         SELECT * FROM read_csv_auto('{}', delim='{}', header=true, ignore_errors=true)",
+         SELECT * FROM read_csv_auto('{}', delim='{}', header=true, ignore_errors=true, all_varchar=true)",
         escaped_path, delim_str
     ))
     .map_err(|e| format!("DuckDB load error: {}", e))?;
@@ -61,9 +60,7 @@ pub fn open_csv_file(
         .map_err(|e| e.to_string())?;
 
     let total_columns = headers.len();
-    let file_size = std::fs::metadata(&path)
-        .map_err(|e| e.to_string())?
-        .len();
+    let file_size = std::fs::metadata(&path).map_err(|e| e.to_string())?.len();
     let filename = std::path::Path::new(&path)
         .file_name()
         .and_then(|n| n.to_str())
@@ -94,10 +91,7 @@ pub fn open_csv_file(
 }
 
 #[tauri::command]
-pub fn close_tab(
-    tab_id: String,
-    state: tauri::State<'_, DuckDBState>,
-) -> Result<(), String> {
+pub fn close_tab(tab_id: String, state: tauri::State<'_, DuckDBState>) -> Result<(), String> {
     state.connections.lock().unwrap().remove(&tab_id);
     Ok(())
 }
