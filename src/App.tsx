@@ -46,6 +46,7 @@ export default function App() {
   useEffect(() => {
     const CSV_EXTS = ["csv", "tsv", "txt"];
     let unlisten: (() => void) | undefined;
+    let cancelled = false;
     getCurrentWebview()
       .onDragDropEvent((event) => {
         if (event.payload.type !== "drop") return;
@@ -54,8 +55,15 @@ export default function App() {
           if (CSV_EXTS.includes(ext)) openFileRef.current(uuid(), path);
         });
       })
-      .then((fn) => { unlisten = fn; });
-    return () => unlisten?.();
+      .then((fn) => {
+        // If cleanup already ran before .then() resolved, unlisten immediately.
+        if (cancelled) fn();
+        else unlisten = fn;
+      });
+    return () => {
+      cancelled = true;
+      unlisten?.();
+    };
   }, []); // single registration for the lifetime of the app
 
   useKeyboardShortcuts({
