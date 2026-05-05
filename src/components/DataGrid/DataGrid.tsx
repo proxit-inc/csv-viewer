@@ -103,10 +103,16 @@ export function DataGrid({
     [headers]
   );
 
+  // Skip the onBodyScroll that fires immediately after programmatic restoration
+  // so the restored position is never written back (which would drift each switch).
+  const skipNextScrollRef = useRef(false);
+
   const onGridReady = (params: GridReadyEvent) => {
     params.api.setGridOption("datasource", datasource);
     if (initialScrollOffset > 0) {
-      params.api.ensureIndexVisible(initialScrollOffset);
+      skipNextScrollRef.current = true;
+      // "top" makes the saved row the first visible row — deterministic restoration.
+      params.api.ensureIndexVisible(initialScrollOffset, "top");
     }
   };
 
@@ -149,7 +155,13 @@ export function DataGrid({
         suppressCellFocus={true}
         enableCellTextSelection={true}
         onGridReady={onGridReady}
-        onBodyScroll={(e) => debouncedScrollSave(e.api.getFirstDisplayedRowIndex())}
+        onBodyScroll={(e) => {
+          if (skipNextScrollRef.current) {
+            skipNextScrollRef.current = false;
+            return;
+          }
+          debouncedScrollSave(e.api.getFirstDisplayedRowIndex());
+        }}
       />
     </div>
   );
