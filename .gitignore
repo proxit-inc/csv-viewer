@@ -26,6 +26,3 @@ dist-ssr
 # Rust
 src-tauri/target/
 src-tauri/gen/
-
-# Test data
-test-data/
