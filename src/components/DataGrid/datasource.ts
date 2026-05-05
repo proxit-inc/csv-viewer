@@ -18,15 +18,13 @@ export function createDatasource(tabId: string): IDatasource {
 
         if (reqId !== latestReqId) return;
 
-        const rowData = result.rows.map((row, idx) => {
-          const obj: Record<string, string> = {
-            __rowNum: String(params.startRow + idx + 1),
-          };
-          row.forEach((cell, ci) => {
-            obj[`col_${ci}`] = cell;
-          });
-          return obj;
-        });
+        const rowData = result.rows.map((row, idx) => ({
+          __rowNum: String(params.startRow + idx + 1),
+          ...row.reduce<Record<string, string>>((acc, cell, ci) => {
+            acc[`col_${ci}`] = cell;
+            return acc;
+          }, {}),
+        }));
 
         params.successCallback(rowData, result.totalRows);
       } catch (err) {

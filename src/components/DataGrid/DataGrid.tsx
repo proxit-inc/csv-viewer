@@ -1,10 +1,11 @@
-import { useMemo, useEffect, useRef } from "react";
+import { useMemo, useEffect, useRef, useCallback } from "react";
 import { AgGridReact } from "ag-grid-react";
 import type { ColDef, GridReadyEvent } from "ag-grid-community";
 import "ag-grid-community/styles/ag-grid.css";
 import "ag-grid-community/styles/ag-theme-alpine.css";
 import type { SearchHit } from "../../types";
 import { createDatasource } from "./datasource";
+import { useDebounce } from "../../hooks/useDebounce";
 
 interface DataGridProps {
   headers: string[];
@@ -25,6 +26,12 @@ export function DataGrid({
 }: DataGridProps) {
   const gridRef = useRef<AgGridReact>(null);
   const datasource = useMemo(() => createDatasource(tabId), [tabId]);
+
+  const handleScrollSave = useCallback(
+    (offset: number) => onScrollSave(offset),
+    [onScrollSave]
+  );
+  const debouncedScrollSave = useDebounce(handleScrollSave, 200);
 
   const columnDefs = useMemo<ColDef[]>(
     () => [
@@ -108,7 +115,7 @@ export function DataGrid({
         suppressCellFocus={true}
         enableCellTextSelection={true}
         onGridReady={onGridReady}
-        onBodyScroll={(e) => onScrollSave(e.api.getFirstDisplayedRowIndex())}
+        onBodyScroll={(e) => debouncedScrollSave(e.api.getFirstDisplayedRowIndex())}
       />
     </div>
   );

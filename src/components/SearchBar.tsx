@@ -1,7 +1,8 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Search, X, ChevronUp, ChevronDown } from "lucide-react";
 import type { SearchHit, AppAction } from "../types";
 import { useSearch } from "../hooks/useSearch";
+import { useDebounce } from "../hooks/useDebounce";
 
 interface SearchBarProps {
   tabId: string;
@@ -16,9 +17,24 @@ export function SearchBar({ tabId, query, hits, currentIndex, dispatch, onClose 
   const inputRef = useRef<HTMLInputElement>(null);
   const { search } = useSearch(dispatch);
 
+  // Local value updates immediately for responsive typing;
+  // the actual search is debounced to avoid hammering the backend.
+  const [localQuery, setLocalQuery] = useState(query);
+  const debouncedSearch = useDebounce(search, 300);
+
   useEffect(() => {
     inputRef.current?.focus();
   }, []);
+
+  // Sync if query is reset externally (e.g. tab switch).
+  useEffect(() => {
+    setLocalQuery(query);
+  }, [query]);
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setLocalQuery(e.target.value);
+    debouncedSearch(tabId, e.target.value);
+  };
 
   const navigate = (delta: number) => {
     if (hits.length === 0) return;
@@ -40,8 +56,8 @@ export function SearchBar({ tabId, query, hits, currentIndex, dispatch, onClose 
       <input
         ref={inputRef}
         type="text"
-        value={query}
-        onChange={(e) => search(tabId, e.target.value)}
+        value={localQuery}
+        onChange={handleChange}
         onKeyDown={(e) => {
           if (e.key === "Enter") navigate(e.shiftKey ? -1 : 1);
           if (e.key === "Escape") onClose();
@@ -52,7 +68,11 @@ export function SearchBar({ tabId, query, hits, currentIndex, dispatch, onClose 
       />
 
       <span className="text-xs shrink-0" style={{ color: "var(--col-text3)" }}>
-        {hits.length > 0 ? `${currentIndex + 1} / ${hits.length}` : query ? "0 results" : ""}
+        {hits.length > 0
+          ? `${currentIndex + 1} / ${hits.length}`
+          : localQuery
+            ? "0 results"
+            : ""}
       </span>
 
       <button

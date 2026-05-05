@@ -3,6 +3,8 @@ use crate::{
     types::{SearchHit, SearchResponse},
 };
 
+const MAX_SEARCH_HITS: usize = 10_000;
+
 #[tauri::command]
 pub fn search_csv(
     tab_id: String,
@@ -48,7 +50,7 @@ pub fn search_csv(
             "SELECT (row_number() OVER ()) - 1 AS rn \
              FROM csv_data \
              WHERE CAST(\"{col_escaped}\" AS VARCHAR) LIKE '%{escaped}%' ESCAPE '\\' \
-             LIMIT 10000"
+             LIMIT {MAX_SEARCH_HITS}"
         );
 
         let mut stmt = conn.prepare(&sql).map_err(|e| e.to_string())?;
@@ -66,9 +68,10 @@ pub fn search_csv(
         }
     }
 
+    // Sort by row then column so frontend can navigate in order.
+    // Keep all per-cell hits so the frontend can highlight individual cells.
     hits.sort_by_key(|h| (h.row, h.column));
-    hits.dedup_by_key(|h| h.row);
-    hits.truncate(10_000);
+    hits.truncate(MAX_SEARCH_HITS);
 
     let total_count = hits.len();
     Ok(SearchResponse { hits, total_count })

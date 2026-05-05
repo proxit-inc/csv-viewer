@@ -8,18 +8,26 @@ use crate::{
     types::FileMetadata,
 };
 
+const DELIMITER_SAMPLE_BYTES: usize = 8_192;
+
 #[tauri::command]
 pub fn open_csv_file(
     path: String,
     tab_id: String,
     state: tauri::State<'_, DuckDBState>,
 ) -> Result<FileMetadata, String> {
+    // Reject paths containing null bytes to prevent injection.
+    if path.contains('\0') {
+        return Err("Invalid file path: contains null byte".into());
+    }
+
     let raw = std::fs::read(&path).map_err(|e| format!("Cannot read file: {}", e))?;
 
     let encoding = detect_encoding(&raw);
     let (decoded, _, _) = encoding.decode(&raw);
 
-    let delimiter = detect_delimiter(&decoded[..decoded.len().min(8192)]);
+    let sample_len = decoded.len().min(DELIMITER_SAMPLE_BYTES);
+    let delimiter = detect_delimiter(&decoded[..sample_len]);
 
     let conn =
         Connection::open_in_memory().map_err(|e| format!("DuckDB init error: {}", e))?;
@@ -29,6 +37,7 @@ pub fn open_csv_file(
         c => c.to_string(),
     };
 
+    // Escape single quotes in path to prevent SQL injection via the file path.
     let escaped_path = path.replace('\'', "''");
     conn.execute_batch(&format!(
         "CREATE TABLE csv_data AS \

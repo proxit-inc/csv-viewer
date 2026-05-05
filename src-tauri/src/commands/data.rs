@@ -1,5 +1,7 @@
 use crate::{state::DuckDBState, types::DataRange};
 
+const MAX_ROWS_PER_FETCH: usize = 500;
+
 #[tauri::command]
 pub fn get_csv_data_range(
     tab_id: String,
@@ -16,7 +18,7 @@ pub fn get_csv_data_range(
 
     let conn = conn_arc.lock().unwrap();
 
-    let limit = end_row.saturating_sub(start_row).min(500);
+    let limit = end_row.saturating_sub(start_row).min(MAX_ROWS_PER_FETCH);
     let offset = start_row;
 
     let total_rows: usize = conn
