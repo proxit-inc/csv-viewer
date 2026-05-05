@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct FileMetadata {
     pub filename: String,
     pub file_path: String,
@@ -13,6 +14,7 @@ pub struct FileMetadata {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct DataRange {
     pub rows: Vec<Vec<String>>,
     pub total_rows: usize,
@@ -25,6 +27,7 @@ pub struct SearchHit {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SearchResponse {
     pub hits: Vec<SearchHit>,
     pub total_count: usize,
