@@ -16,6 +16,7 @@ interface DataGridProps {
   onScrollSave: (tabId: string, offset: number) => void;
 }
 
+
 export function DataGrid({
   headers,
   totalRows,
@@ -26,9 +27,10 @@ export function DataGrid({
   onScrollSave,
 }: DataGridProps) {
   const gridRef = useRef<AgGridReact>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const datasource = useMemo(() => createDatasource(tabId), [tabId]);
 
-  // Always-fresh refs so the unmount cleanup never holds stale values.
+  // Always-fresh refs so unmount cleanup never holds stale values.
   const onScrollSaveRef = useRef(onScrollSave);
   const tabIdRef = useRef(tabId);
   useEffect(() => {
@@ -36,18 +38,17 @@ export function DataGrid({
     tabIdRef.current = tabId;
   });
 
-  // Tracks the first visible row. Updated by onBodyScroll (ref-only, no renders).
-  // Initialized to initialScrollOffset so an immediate unmount saves correctly.
-  const currentScrollRowRef = useRef(initialScrollOffset);
+  // Stores the current scroll position in PIXELS (not row index) so save/restore
+  // is pixel-perfect and unaffected by partial-row rounding in getFirstDisplayedRowIndex().
+  const currentScrollPxRef = useRef(initialScrollOffset);
 
-  // Timestamp until which onBodyScroll updates are suppressed.
-  // Set during scroll restoration to avoid overwriting the intended offset.
+  // Suppress scroll events fired by programmatic restoration for 500 ms.
   const ignoreScrollUntilRef = useRef(0);
 
-  // Save exactly once on unmount (tab switch or close).
+  // Save exactly once on unmount (fallback for mid-scroll tab switch).
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => () => {
-    onScrollSaveRef.current(tabIdRef.current, currentScrollRowRef.current);
+    onScrollSaveRef.current(tabIdRef.current, currentScrollPxRef.current);
   }, []);
 
   // Search hit highlighting — refs avoid recreating columnDefs on every update.
@@ -116,11 +117,14 @@ export function DataGrid({
   const onGridReady = (params: GridReadyEvent) => {
     params.api.setGridOption("datasource", datasource);
     if (initialScrollOffset > 0) {
-      // Suppress scroll-end saves for 500 ms so the restoration scroll
-      // does not overwrite state with a slightly-off value.
       ignoreScrollUntilRef.current = Date.now() + 500;
-      currentScrollRowRef.current = initialScrollOffset;
-      params.api.ensureIndexVisible(initialScrollOffset, "top");
+      currentScrollPxRef.current = initialScrollOffset;
+      // Restore by setting scrollTop directly — pixel-perfect, no row-index rounding.
+      // requestAnimationFrame ensures the AG Grid viewport element is in the DOM.
+      requestAnimationFrame(() => {
+        const vp = containerRef.current?.querySelector(".ag-body-viewport") as HTMLElement | null;
+        if (vp) vp.scrollTop = initialScrollOffset;
+      });
     }
   };
 
@@ -130,6 +134,7 @@ export function DataGrid({
 
   return (
     <div
+      ref={containerRef}
       className="ag-theme-alpine flex-1"
       style={
         {
@@ -164,17 +169,16 @@ export function DataGrid({
         enableCellTextSelection={true}
         onGridReady={onGridReady}
         onBodyScroll={(e) => {
-          // Keep ref in sync for the unmount-save fallback (tab switch mid-scroll).
+          // Keep ref current for the unmount-save fallback (mid-scroll tab switch).
           if (Date.now() <= ignoreScrollUntilRef.current) return;
-          currentScrollRowRef.current = e.api.getFirstDisplayedRowIndex();
+          currentScrollPxRef.current = e.api.getVerticalPixelRange().top;
         }}
         onBodyScrollEnd={(e) => {
-          // Save to state immediately when the user stops scrolling so the
-          // next restoration is always based on the accurate settled position.
+          // Save to state when scrolling settles so the next restoration is exact.
           if (Date.now() <= ignoreScrollUntilRef.current) return;
-          const row = e.api.getFirstDisplayedRowIndex();
-          currentScrollRowRef.current = row;
-          onScrollSaveRef.current(tabIdRef.current, row);
+          const px = e.api.getVerticalPixelRange().top;
+          currentScrollPxRef.current = px;
+          onScrollSaveRef.current(tabIdRef.current, px);
         }}
       />
     </div>
