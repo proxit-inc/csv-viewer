@@ -1,9 +1,6 @@
 import { useCallback, useEffect, useRef } from "react";
 
-export function useDebounce<T extends (...args: Parameters<T>) => void>(
-  fn: T,
-  delayMs: number
-): T {
+export function useDebounce<T extends (...args: Parameters<T>) => void>(fn: T, delayMs: number): T {
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
 
   // Cancel any pending timer when the component unmounts so a stale
@@ -15,6 +12,6 @@ export function useDebounce<T extends (...args: Parameters<T>) => void>(
       clearTimeout(timer.current);
       timer.current = setTimeout(() => fn(...args), delayMs);
     }) as T,
-    [fn, delayMs]
+    [fn, delayMs],
   );
 }

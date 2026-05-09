@@ -16,7 +16,6 @@ interface DataGridProps {
   onScrollSave: (tabId: string, offset: number) => void;
 }
 
-
 export function DataGrid({
   headers,
   totalRows,
@@ -47,9 +46,12 @@ export function DataGrid({
 
   // Save exactly once on unmount (fallback for mid-scroll tab switch).
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => () => {
-    onScrollSaveRef.current(tabIdRef.current, currentScrollPxRef.current);
-  }, []);
+  useEffect(
+    () => () => {
+      onScrollSaveRef.current(tabIdRef.current, currentScrollPxRef.current);
+    },
+    [],
+  );
 
   // Search hit highlighting — refs avoid recreating columnDefs on every update.
   const searchHitsRef = useRef<SearchHit[]>(searchHits);
@@ -111,7 +113,7 @@ export function DataGrid({
         },
       })),
     ],
-    [headers]
+    [headers],
   );
 
   const onGridReady = (params: GridReadyEvent) => {

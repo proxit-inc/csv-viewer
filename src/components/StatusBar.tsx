@@ -6,11 +6,7 @@ interface StatusBarProps {
 }
 
 export function StatusBar({ activeTab, tabCount }: StatusBarProps) {
-  const status = activeTab?.isLoading
-    ? "Loading..."
-    : activeTab?.metadata
-      ? "Ready"
-      : "No file";
+  const status = activeTab?.isLoading ? "Loading..." : activeTab?.metadata ? "Ready" : "No file";
 
   const rowInfo = activeTab?.metadata
     ? `${activeTab.metadata.totalRows.toLocaleString()} rows total`

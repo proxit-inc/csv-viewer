@@ -27,13 +27,13 @@ export default function App() {
       dispatch({ type: "TAB_CLOSE", payload: { tabId } });
       invoke("close_tab", { tabId }).catch(console.error);
     },
-    [dispatch]
+    [dispatch],
   );
 
   const handleScrollSave = useCallback(
     (tabId: string, offset: number) =>
       dispatch({ type: "TAB_SCROLL_SAVE", payload: { tabId, offset } }),
-    [dispatch]
+    [dispatch],
   );
 
   useEffect(() => {
@@ -47,7 +47,9 @@ export default function App() {
   // openFileRef lets the closure always call the latest openFile without
   // re-registering the listener on every render.
   const openFileRef = useRef(openFile);
-  useEffect(() => { openFileRef.current = openFile; }, [openFile]);
+  useEffect(() => {
+    openFileRef.current = openFile;
+  }, [openFile]);
 
   useEffect(() => {
     const CSV_EXTS = ["csv", "tsv", "txt"];
@@ -85,9 +87,7 @@ export default function App() {
 
   const renderContent = () => {
     if (!activeTab) {
-      return (
-        <EmptyState onOpen={() => openFile(uuid())} />
-      );
+      return <EmptyState onOpen={() => openFile(uuid())} />;
     }
     if (activeTab.isLoading || !activeTab.metadata) {
       return <LoadingState filename={activeTab.filename} />;
