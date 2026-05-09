@@ -2,7 +2,7 @@ name: CI — Frontend
 
 on:
   push:
-    branches: [main, 'feat/**', 'fix/**']
+    branches: [main]
     paths:
       - 'src/**'
       - 'package.json'
@@ -11,7 +11,7 @@ on:
       - 'vite.config.ts'
       - '.github/workflows/ci-frontend.yml'
   pull_request:
-    branches: [main, 'feat/**', 'fix/**']
+    branches: [main]
     types: [opened, synchronize, reopened]
     paths:
       - 'src/**'
