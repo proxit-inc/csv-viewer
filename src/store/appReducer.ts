@@ -47,8 +47,8 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       const { tabId, metadata } = action.payload;
       return {
         ...state,
-        tabs: state.tabs.map((t): CsvTab =>
-          t.id === tabId ? { ...t, metadata, isLoading: false } : t
+        tabs: state.tabs.map(
+          (t): CsvTab => (t.id === tabId ? { ...t, metadata, isLoading: false } : t),
         ),
       };
     }
@@ -57,9 +57,7 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       const { tabId, offset } = action.payload;
       return {
         ...state,
-        tabs: state.tabs.map((t): CsvTab =>
-          t.id === tabId ? { ...t, scrollOffset: offset } : t
-        ),
+        tabs: state.tabs.map((t): CsvTab => (t.id === tabId ? { ...t, scrollOffset: offset } : t)),
       };
     }
 
@@ -73,10 +71,9 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       const { tabId, query, hits } = action.payload;
       return {
         ...state,
-        tabs: state.tabs.map((t): CsvTab =>
-          t.id === tabId
-            ? { ...t, searchQuery: query, searchHits: hits, searchHitIndex: 0 }
-            : t
+        tabs: state.tabs.map(
+          (t): CsvTab =>
+            t.id === tabId ? { ...t, searchQuery: query, searchHits: hits, searchHitIndex: 0 } : t,
         ),
       };
     }
@@ -85,9 +82,7 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       const { tabId, index } = action.payload;
       return {
         ...state,
-        tabs: state.tabs.map((t): CsvTab =>
-          t.id === tabId ? { ...t, searchHitIndex: index } : t
-        ),
+        tabs: state.tabs.map((t): CsvTab => (t.id === tabId ? { ...t, searchHitIndex: index } : t)),
       };
     }
 

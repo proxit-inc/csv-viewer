@@ -68,11 +68,7 @@ export function SearchBar({ tabId, query, hits, currentIndex, dispatch, onClose 
       />
 
       <span className="text-xs shrink-0" style={{ color: "var(--col-text3)" }}>
-        {hits.length > 0
-          ? `${currentIndex + 1} / ${hits.length}`
-          : localQuery
-            ? "0 results"
-            : ""}
+        {hits.length > 0 ? `${currentIndex + 1} / ${hits.length}` : localQuery ? "0 results" : ""}
       </span>
 
       <button
