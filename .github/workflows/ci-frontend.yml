@@ -2,7 +2,7 @@ name: CI — Frontend
 
 on:
   push:
-    branches: [main]
+    branches: [main, 'feat/**']
     paths:
       - 'src/**'
       - 'package.json'
