@@ -1,8 +1,16 @@
+# CSV Viewer — Implementation Specification
+
+> **Language note:** This document is written in Japanese. For a concise English architecture overview see [`ARCHITECTURE.md`](ARCHITECTURE.md).
+>
+> **Summary (EN):** Full implementation specification for CSV Viewer — a macOS desktop app for viewing large CSV files (100k+ rows) across multiple tabs. Covers tech stack, system architecture, functional requirements, UI component design, data models, Tauri IPC API, DuckDB design, frontend/backend implementation samples, and development phases. Phase 1 (read-only viewer) is complete. Phase 2 (sort/filter) and Phase 3 (cell edit/export) are planned for future releases.
+
+---
+
 # CSV Viewer 実装ドキュメント
 
 **バージョン**: 1.0  
 **作成日**: 2026年2月  
-**ステータス**: 実装準備完了
+**ステータス**: Phase 1 実装完了
 
 ---
 

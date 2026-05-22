@@ -1,0 +1,60 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#FFA040"/>
+      <stop offset="100%" style="stop-color:#E84A0A"/>
+    </linearGradient>
+    <filter id="shadow" x="-10%" y="-10%" width="130%" height="130%">
+      <feDropShadow dx="0" dy="4" stdDeviation="8" flood-color="rgba(0,0,0,0.20)"/>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1024" height="1024" rx="230" fill="url(#bg)"/>
+
+  <!-- Sheet 3 (back) -->
+  <g filter="url(#shadow)" opacity="0.60">
+    <rect x="320" y="195" width="440" height="560" rx="22" fill="white"/>
+    <rect x="320" y="195" width="440" height="52" rx="22" fill="#FF8C30" opacity="0.25"/>
+    <rect x="320" y="247" width="440" height="1" fill="#E0E0E0"/>
+    <rect x="352" y="275" width="376" height="14" rx="7" fill="#F0F0F0"/>
+    <rect x="352" y="303" width="310" height="14" rx="7" fill="#F0F0F0"/>
+    <rect x="352" y="331" width="340" height="14" rx="7" fill="#F0F0F0"/>
+    <rect x="352" y="359" width="290" height="14" rx="7" fill="#F0F0F0"/>
+    <rect x="352" y="387" width="355" height="14" rx="7" fill="#F0F0F0"/>
+  </g>
+
+  <!-- Sheet 2 (middle) -->
+  <g filter="url(#shadow)" opacity="0.80">
+    <rect x="272" y="258" width="440" height="560" rx="22" fill="white"/>
+    <rect x="272" y="258" width="440" height="52" rx="22" fill="#FF8C30" opacity="0.25"/>
+    <rect x="272" y="310" width="440" height="1" fill="#E0E0E0"/>
+    <rect x="304" y="338" width="376" height="14" rx="7" fill="#F0F0F0"/>
+    <rect x="304" y="366" width="310" height="14" rx="7" fill="#F0F0F0"/>
+    <rect x="304" y="394" width="340" height="14" rx="7" fill="#F0F0F0"/>
+    <rect x="304" y="422" width="290" height="14" rx="7" fill="#F0F0F0"/>
+    <rect x="304" y="450" width="355" height="14" rx="7" fill="#F0F0F0"/>
+    <rect x="304" y="478" width="320" height="14" rx="7" fill="#F0F0F0"/>
+  </g>
+
+  <!-- Sheet 1 (front) -->
+  <g filter="url(#shadow)">
+    <rect x="222" y="318" width="440" height="560" rx="22" fill="white"/>
+    <!-- Header band -->
+    <rect x="222" y="318" width="440" height="56" rx="22" fill="#FF8C30" opacity="0.30"/>
+    <rect x="222" y="374" width="440" height="1" fill="#E0E0E0"/>
+    <!-- Column header dots -->
+    <rect x="254" y="338" width="100" height="16" rx="8" fill="#FF9040" opacity="0.60"/>
+    <rect x="366" y="338" width="70" height="16" rx="8" fill="#FF9040" opacity="0.60"/>
+    <rect x="448" y="338" width="80" height="16" rx="8" fill="#FF9040" opacity="0.60"/>
+    <!-- Data rows -->
+    <rect x="254" y="402" width="376" height="14" rx="7" fill="#F5F5F5"/>
+    <rect x="254" y="430" width="310" height="14" rx="7" fill="#EBEBEB"/>
+    <rect x="254" y="458" width="340" height="14" rx="7" fill="#F5F5F5"/>
+    <rect x="254" y="486" width="290" height="14" rx="7" fill="#EBEBEB"/>
+    <rect x="254" y="514" width="355" height="14" rx="7" fill="#F5F5F5"/>
+    <rect x="254" y="542" width="320" height="14" rx="7" fill="#EBEBEB"/>
+    <rect x="254" y="570" width="300" height="14" rx="7" fill="#F5F5F5"/>
+    <rect x="254" y="598" width="365" height="14" rx="7" fill="#EBEBEB"/>
+  </g>
+</svg>
