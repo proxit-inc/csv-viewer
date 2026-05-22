@@ -2,7 +2,7 @@ name: CI — Rust
 
 on:
   push:
-    branches: [main, 'feat/**']
+    branches: [main]
     paths:
       - 'src-tauri/src/**'
       - 'src-tauri/Cargo.toml'
