@@ -12,9 +12,9 @@ macOS desktop app for viewing large CSV files (100k rows) across multiple tabs. 
 
 ```bash
 pnpm tauri dev                                              # dev server with HMR
-pnpm tauri build -- --target universal-apple-darwin        # Universal Binary (Intel + Apple Silicon)
-pnpm tauri build -- --target x86_64-apple-darwin           # Intel only
-pnpm tauri build -- --target aarch64-apple-darwin          # Apple Silicon only
+pnpm tauri build                                            # native arch (Apple Silicon or Intel)
+# Universal Binary (arm64 + x86_64) cannot be built locally via CLI due to a Tauri limitation.
+# Push a version tag (e.g. v0.1.0) to trigger the release CI, which uses tauri-action to produce the Universal Binary.
 ```
 
 ### Lint & Format
