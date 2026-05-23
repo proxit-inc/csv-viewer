@@ -25,6 +25,8 @@ jobs:
   rust:
     name: Format, Clippy, Test
     runs-on: ubuntu-24.04
+    env:
+      RUSTFLAGS: "-C link-arg=-fuse-ld=mold"
     defaults:
       run:
         working-directory: src-tauri
@@ -32,10 +34,17 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /opt/hostedtoolcache/CodeQL
+
       - name: Cache system dependencies
         uses: awalsh128/cache-apt-pkgs-action@latest
         with:
-          packages: libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+          packages: libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf mold
           version: 1.0
 
       - name: Setup Rust (stable)
