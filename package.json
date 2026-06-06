@@ -17,7 +17,7 @@
     "@tauri-apps/api": "^2",
     "@tauri-apps/plugin-dialog": "^2",
     "ag-grid-community": "^31.0.0",
-    "ag-grid-react": "^31.0.0",
+    "ag-grid-react": "^35.3.1",
     "lucide-react": "^0.294.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
