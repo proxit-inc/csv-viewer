@@ -21,4 +21,4 @@ duckdb              = { version = "1", features = ["bundled"] }
 encoding_rs         = "0.8"
 chardetng           = "0.1"
 thiserror           = "1.0"
-uuid                = { version = "1.6", features = ["v4"] }
+uuid                = { version = "1.23", features = ["v4"] }
