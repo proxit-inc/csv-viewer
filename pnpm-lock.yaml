@@ -15,8 +15,8 @@ importers:
         specifier: ^2
         version: 2.7.1
       ag-grid-community:
-        specifier: ^31.0.0
-        version: 31.3.4
+        specifier: ^35.3.1
+        version: 35.3.1
       ag-grid-react:
         specifier: ^31.0.0
         version: 31.3.4(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
@@ -737,8 +737,14 @@ packages:
     peerDependencies:
       vite: ^4.2.0 || ^5.0.0 || ^6.0.0 || ^7.0.0
 
+  ag-charts-types@13.3.1:
+    resolution: {integrity: sha512-m37eUe4g//swvGh8PWMlYQH3gknjSsPeW4sQwBhM3/auGAHmN0wvxEWlrdAn98pBPg4HoKbtOy+yf7gPCYsnvQ==}
+
   ag-grid-community@31.3.4:
     resolution: {integrity: sha512-jOxQO86C6eLnk1GdP24HB6aqaouFzMWizgfUwNY5MnetiWzz9ZaAmOGSnW/XBvdjXvC5Fpk3gSbvVKKQ7h9kBw==}
+
+  ag-grid-community@35.3.1:
+    resolution: {integrity: sha512-Wmkd/xYTCbAApcZZO74nBggZCnd/oX753NY3MJ4zYARVpfBHRWWhIBJ2sFTFKbDWwHZOWsx3YT9+kkyeuyLKlw==}
 
   ag-grid-react@31.3.4:
     resolution: {integrity: sha512-WmPASHRFGSTxCMRStWG5bRtln0Ugsdqbb3+Y8sEyGHeLw4hXqfpqie3lT9kqCOl7wPWUjCpwmFdXzRnWPmyyeg==}
@@ -1693,7 +1699,13 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
+  ag-charts-types@13.3.1: {}
+
   ag-grid-community@31.3.4: {}
+
+  ag-grid-community@35.3.1:
+    dependencies:
+      ag-charts-types: 13.3.1
 
   ag-grid-react@31.3.4(react-dom@18.3.1(react@18.3.1))(react@18.3.1):
     dependencies:
