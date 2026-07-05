@@ -4,10 +4,10 @@ import random
 import string
 
 
-def gen(filename, rows, encoding="utf-8", delimiter=","):
+def gen(filename, rows, encoding="utf-8", delimiter=",", cities=None):
     os.makedirs(os.path.dirname(filename) or ".", exist_ok=True)
     headers = ["id", "name", "city", "category", "value", "date"]
-    cities = ["Tokyo", "Osaka", "Nagoya", "Fukuoka", "Sapporo"]
+    cities = cities or ["Tokyo", "Osaka", "Nagoya", "Fukuoka", "Sapporo"]
     cats = ["A", "B", "C", "D"]
 
     with open(filename, "w", newline="", encoding=encoding) as f:
@@ -29,6 +29,11 @@ def gen(filename, rows, encoding="utf-8", delimiter=","):
 
 if __name__ == "__main__":
     gen("test-data/utf8_100k.csv", 100_000)
-    gen("test-data/sjis_sample.csv", 10_000, encoding="shift_jis")
+    gen(
+        "test-data/sjis_sample.csv",
+        10_000,
+        encoding="shift_jis",
+        cities=["東京", "大阪", "名古屋", "福岡", "札幌"],
+    )
     gen("test-data/tab_delimited.tsv", 10_000, delimiter="\t")
     gen("test-data/small.csv", 100)
