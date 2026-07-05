@@ -26,3 +26,7 @@ dist-ssr
 # Rust
 src-tauri/target/
 src-tauri/gen/
+
+# Icons
+src-tauri/icons/android/
+src-tauri/icons/ios/
