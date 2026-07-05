@@ -39,6 +39,12 @@ jobs:
           sudo rm -rf /opt/ghc
           sudo rm -rf /opt/hostedtoolcache/CodeQL
 
+      # The runner image's baked-in apt index can reference package builds the
+      # mirror has already rotated out, causing sporadic 404s on transitive
+      # deps (e.g. libnghttp2-dev) during the cached install below.
+      - name: Refresh apt package lists
+        run: sudo apt-get update
+
       - name: Cache system dependencies
         uses: awalsh128/cache-apt-pkgs-action@latest
         with:
