@@ -26,7 +26,10 @@ jobs:
     name: Format, Clippy, Test
     runs-on: ubuntu-24.04
     env:
-      RUSTFLAGS: "-C link-arg=-fuse-ld=mold"
+      # Rust's default self-contained rust-lld linker for x86_64-unknown-linux-gnu conflicts
+      # with -fuse-ld=mold (both get passed to cc, and ld.mold isn't in rustc's bundled
+      # linker dir), so opt out of the self-contained linker to let mold take over cleanly.
+      RUSTFLAGS: "-C link-self-contained=-linker -C link-arg=-fuse-ld=mold"
     defaults:
       run:
         working-directory: src-tauri
