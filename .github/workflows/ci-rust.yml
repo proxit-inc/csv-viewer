@@ -25,8 +25,6 @@ jobs:
   rust:
     name: Format, Clippy, Test
     runs-on: ubuntu-24.04
-    env:
-      RUSTFLAGS: "-C link-arg=-fuse-ld=mold"
     defaults:
       run:
         working-directory: src-tauri
@@ -41,10 +39,16 @@ jobs:
           sudo rm -rf /opt/ghc
           sudo rm -rf /opt/hostedtoolcache/CodeQL
 
+      # The runner image's baked-in apt index can reference package builds the
+      # mirror has already rotated out, causing sporadic 404s on transitive
+      # deps (e.g. libnghttp2-dev) during the cached install below.
+      - name: Refresh apt package lists
+        run: sudo apt-get update
+
       - name: Cache system dependencies
         uses: awalsh128/cache-apt-pkgs-action@latest
         with:
-          packages: libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf mold
+          packages: libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
           version: 1.0
 
       - name: Setup Rust (stable)
