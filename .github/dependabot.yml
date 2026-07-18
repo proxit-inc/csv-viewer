@@ -4,13 +4,31 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+    # Bundle all npm updates into a single PR to cut CI runs and review noise.
+    groups:
+      npm-dependencies:
+        patterns:
+          - "*"
 
   - package-ecosystem: "cargo"
     directory: "/src-tauri"
     schedule:
       interval: "weekly"
+    # Bundle Cargo updates into a single PR. Each Cargo.lock change invalidates
+    # the Rust build cache and forces a full (~9 min) rebuild of the bundled
+    # DuckDB C++ sources, so collapsing many small bumps into one PR minimizes
+    # how often that cold rebuild is paid.
+    groups:
+      cargo-dependencies:
+        patterns:
+          - "*"
 
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
       interval: "weekly"
+    # Bundle all GitHub Actions updates into a single PR.
+    groups:
+      github-actions:
+        patterns:
+          - "*"
