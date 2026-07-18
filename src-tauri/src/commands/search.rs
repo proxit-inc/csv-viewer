@@ -140,4 +140,42 @@ mod tests {
         assert_eq!(search(&conn, "50%").unwrap().total_count, 1);
         assert_eq!(search(&conn, "a_b").unwrap().total_count, 1);
     }
+
+    #[test]
+    fn empty_query_returns_no_hits_without_querying() {
+        let conn = setup();
+        let response = search(&conn, "").expect("empty query should not error");
+        assert_eq!(response.total_count, 0);
+        assert!(response.hits.is_empty());
+    }
+
+    #[test]
+    fn no_hits_for_a_term_that_does_not_appear() {
+        let conn = setup();
+        let response = search(&conn, "nope-not-here").expect("search should not error");
+        assert_eq!(response.total_count, 0);
+    }
+
+    #[test]
+    fn finds_hits_in_the_correct_column_across_a_real_file() {
+        let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../test-data/small.csv");
+        let (conn, metadata) =
+            crate::commands::file::load_csv(path).expect("small.csv should load");
+        let city_col = metadata
+            .headers
+            .iter()
+            .position(|h| h == "city")
+            .expect("small.csv should have a city column");
+
+        let response = search(&conn, "Sapporo").expect("search should not error");
+        assert!(
+            !response.hits.is_empty(),
+            "fixture should contain 'Sapporo'"
+        );
+        assert!(
+            response.hits.iter().all(|h| h.column == city_col),
+            "all 'Sapporo' hits should be in the city column, got {:?}",
+            response.hits
+        );
+    }
 }
