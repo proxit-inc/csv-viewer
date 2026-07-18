@@ -101,4 +101,45 @@ mod tests {
             );
         }
     }
+
+    #[test]
+    fn fetches_the_requested_row_range_in_order() {
+        let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../test-data/small.csv");
+        let (conn, metadata) = load_csv(path).expect("small.csv should load");
+
+        let range = get_data_range(&conn, 0, 5).expect("range fetch should not error");
+
+        assert_eq!(range.total_rows, 100);
+        assert_eq!(range.rows.len(), 5);
+        assert_eq!(range.rows[0].len(), metadata.total_columns);
+        // small.csv's id column is 1, 2, 3, ... in file order.
+        assert_eq!(range.rows[0][0], "1");
+        assert_eq!(range.rows[4][0], "5");
+    }
+
+    #[test]
+    fn caps_the_fetch_at_max_rows_per_fetch() {
+        let path = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../test-data/tab_delimited.tsv"
+        );
+        let (conn, _metadata) = load_csv(path).expect("tab_delimited.tsv should load");
+
+        let range = get_data_range(&conn, 0, 10_000).expect("range fetch should not error");
+
+        assert_eq!(range.rows.len(), MAX_ROWS_PER_FETCH);
+        assert_eq!(range.total_rows, 10_000);
+    }
+
+    #[test]
+    fn returns_fewer_rows_near_the_end_of_the_table() {
+        let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../test-data/small.csv");
+        let (conn, _metadata) = load_csv(path).expect("small.csv should load");
+
+        // Only 5 rows remain (indices 95..99) though the requested window asks for 10.
+        let range = get_data_range(&conn, 95, 105).expect("range fetch should not error");
+
+        assert_eq!(range.rows.len(), 5);
+        assert_eq!(range.rows[4][0], "100");
+    }
 }
