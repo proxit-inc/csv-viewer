@@ -135,9 +135,3 @@ jobs:
 
       - name: Run tests (cargo test)
         run: cargo test
-
-      # PoC visibility: confirm sccache is actually serving cache hits for the
-      # DuckDB C/C++ compiles. Review "Cache hits" vs "Compile requests" here.
-      - name: sccache stats
-        if: always()
-        run: sccache --show-stats
