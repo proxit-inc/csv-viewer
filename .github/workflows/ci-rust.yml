@@ -21,9 +21,16 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
+# clippy and test run as separate parallel jobs on purpose. cargo clippy sets a
+# workspace rustc wrapper that is part of every crate's fingerprint, so a clippy
+# build and a test build can never share artifacts — running them in one job
+# recompiles the (bundled, ~8 min C++) DuckDB amalgamation twice per run AND
+# leaves a mixed target/ that the next run's cache restore can't reuse, forcing
+# yet another rebuild. Splitting them gives each job a stable, single-profile
+# cache that actually hits across runs, and overlaps the two heavy compiles.
 jobs:
-  rust:
-    name: Format, Clippy, Test
+  lint:
+    name: Format & Clippy
     runs-on: ubuntu-24.04
     defaults:
       run:
@@ -60,13 +67,55 @@ jobs:
         uses: Swatinem/rust-cache@23869a5bd66c73db3c0ac40331f3206eb23791dc # v2.9.1
         with:
           workspaces: src-tauri -> target
+          # Distinct key keeps the clippy-fingerprinted target/ from clobbering
+          # the test job's cache (and vice versa).
+          key: clippy
           cache-on-failure: true
 
       - name: Format check (cargo fmt)
         run: cargo fmt --check
 
       - name: Lint (cargo clippy)
-        run: cargo clippy -- -D warnings
+        run: cargo clippy --all-targets -- -D warnings
+
+  test:
+    name: Test
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: src-tauri
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /opt/hostedtoolcache/CodeQL
+
+      # The runner image's baked-in apt index can reference package builds the
+      # mirror has already rotated out, causing sporadic 404s on transitive
+      # deps (e.g. libnghttp2-dev) during the cached install below.
+      - name: Refresh apt package lists
+        run: sudo apt-get update
+
+      - name: Cache system dependencies
+        uses: awalsh128/cache-apt-pkgs-action@553a35bb8ebd9fcabcb1c9451aa4c98e1b4ca8a9 # v1.6.3
+        with:
+          packages: libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+          version: 1.0
+
+      - name: Setup Rust (stable)
+        uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@23869a5bd66c73db3c0ac40331f3206eb23791dc # v2.9.1
+        with:
+          workspaces: src-tauri -> target
+          key: test
+          cache-on-failure: true
 
       - name: Run tests (cargo test)
         run: cargo test
