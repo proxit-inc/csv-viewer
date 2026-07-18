@@ -46,7 +46,7 @@ describe("useSearch", () => {
     });
   });
 
-  it("does not dispatch when search_csv rejects", async () => {
+  it("dispatches SET_ERROR when search_csv rejects", async () => {
     invokeMock.mockRejectedValue(new Error("boom"));
     const dispatch = vi.fn();
     const { result } = renderHook(() => useSearch(dispatch));
@@ -55,6 +55,9 @@ describe("useSearch", () => {
       await result.current.search("tab-1", "needle");
     });
 
-    expect(dispatch).not.toHaveBeenCalled();
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "SET_ERROR",
+      payload: "Search failed: boom",
+    });
   });
 });
