@@ -56,10 +56,15 @@ export function DataGrid({
   // Search hit highlighting — refs avoid recreating columnDefs on every update.
   const searchHitsRef = useRef<SearchHit[]>(searchHits);
   const currentHitIndexRef = useRef<number>(currentHitIndex);
+  // Set of "row:col" keys, precomputed once per search result so cellStyle can
+  // do an O(1) lookup instead of an O(hits) scan per cell per grid refresh
+  // (up to 10k hits × every visible cell would otherwise threaten 60fps).
+  const hitKeySetRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     searchHitsRef.current = searchHits;
     currentHitIndexRef.current = currentHitIndex;
+    hitKeySetRef.current = new Set(searchHits.map((h) => `${h.row}:${h.column}`));
 
     const api = gridRef.current?.api;
     if (!api) return;
@@ -106,7 +111,7 @@ export function DataGrid({
           if (currentHit?.row === rowIdx && currentHit?.column === idx) {
             return { ...base, backgroundColor: "#FDE68A", color: "#92400E" };
           }
-          if (hits.some((h) => h.row === rowIdx && h.column === idx)) {
+          if (hitKeySetRef.current.has(`${rowIdx}:${idx}`)) {
             return { ...base, backgroundColor: "#FEF9C3" };
           }
           return base;
