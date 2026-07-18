@@ -34,7 +34,7 @@
     "@vitejs/plugin-react": "^4.6.0",
     "autoprefixer": "^10.4.0",
     "jsdom": "^29.1.1",
-    "oxfmt": "^0.48.0",
+    "oxfmt": "^0.59.0",
     "oxlint": "^0.16.0",
     "postcss": "^8.4.0",
     "tailwindcss": "^3.4.0",
