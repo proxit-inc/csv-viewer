@@ -15,7 +15,9 @@ export function useSearch(dispatch: React.Dispatch<AppAction>) {
         payload: { tabId, query, hits: result.hits },
       });
     } catch (err) {
-      console.error("Search failed:", err);
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error("Search failed:", msg);
+      dispatch({ type: "SET_ERROR", payload: `Search failed: ${msg}` });
     }
   };
 
