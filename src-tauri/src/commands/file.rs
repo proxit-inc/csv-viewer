@@ -31,7 +31,15 @@ pub(crate) fn load_csv(path: &str) -> Result<(Connection, FileMetadata), String>
     let encoding = detect_encoding(&raw);
     let (decoded, _, _) = encoding.decode(&raw);
 
-    let sample_len = decoded.len().min(DELIMITER_SAMPLE_BYTES);
+    // Truncate the delimiter sample at a UTF-8 char boundary. `decoded.len()` is a
+    // byte length, so a raw `&decoded[..DELIMITER_SAMPLE_BYTES]` slice panics when
+    // the 8_192-byte offset lands in the middle of a multibyte character (e.g. a
+    // 3-byte Japanese kanji). Walk back to the largest boundary <= the byte cap.
+    // (str::floor_char_boundary is still unstable, so do it by hand.)
+    let mut sample_len = DELIMITER_SAMPLE_BYTES.min(decoded.len());
+    while !decoded.is_char_boundary(sample_len) {
+        sample_len -= 1;
+    }
     let delimiter = detect_delimiter(&decoded[..sample_len]);
 
     // DuckDB's read_csv_auto assumes UTF-8. For non-UTF-8 source files, write the
@@ -170,6 +178,40 @@ mod tests {
             "expected a decoded Japanese city name, got {:?}",
             city
         );
+    }
+
+    #[test]
+    fn loads_utf8_file_with_multibyte_char_straddling_delimiter_sample_boundary() {
+        // Regression for #6: a raw `&decoded[..DELIMITER_SAMPLE_BYTES]` slice panics
+        // when byte 8_192 lands inside a multibyte character. Build a UTF-8 CSV whose
+        // second column pads each row with 3-byte kanji so that the byte at offset
+        // DELIMITER_SAMPLE_BYTES is not a char boundary, then confirm the load
+        // succeeds instead of aborting.
+        // Fixed-width rows keep the byte layout deterministic. Header is 8 bytes
+        // ("id,text\n"); each row is 18 bytes ("x,あああああ\n" = 2 + 5*3 + 1), which
+        // places byte 8_192 inside a 3-byte kanji rather than on a boundary.
+        let header = "id,text\n";
+        let mut body = String::from(header);
+        let mut row = 0;
+        while body.len() < DELIMITER_SAMPLE_BYTES + 64 {
+            body.push_str("x,あああああ\n");
+            row += 1;
+        }
+        assert!(
+            !body.is_char_boundary(DELIMITER_SAMPLE_BYTES),
+            "test fixture must straddle the boundary, adjust padding"
+        );
+
+        let temp_path =
+            std::env::temp_dir().join(format!("csv-viewer-test-{}.csv", uuid::Uuid::new_v4()));
+        std::fs::write(&temp_path, &body).expect("write temp fixture");
+        let _cleanup = TempFile(temp_path.clone());
+
+        let (_conn, metadata) =
+            load_csv(temp_path.to_str().unwrap()).expect("should load without panicking");
+        assert_eq!(metadata.encoding, "UTF-8");
+        assert_eq!(metadata.delimiter, ",");
+        assert_eq!(metadata.total_rows, row);
     }
 
     #[test]
