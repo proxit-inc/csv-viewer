@@ -100,6 +100,18 @@ jobs:
     defaults:
       run:
         working-directory: src-tauri
+    env:
+      # Mirror the lint job: route the bundled DuckDB C/C++ compiles (~9 min)
+      # through sccache so the test build reuses cached objects across runs even
+      # when Cargo.lock changes invalidate the rust-cache artifact cache.
+      SCCACHE_GHA_ENABLED: "true"
+      RUSTC_WRAPPER: "sccache"
+      # The cc crate recognizes `sccache` as a compiler wrapper, so the DuckDB
+      # C/C++ build-script compiles route through sccache too.
+      CC: "sccache cc"
+      CXX: "sccache c++"
+      # sccache is incompatible with Cargo incremental compilation.
+      CARGO_INCREMENTAL: "0"
     steps:
       - name: Checkout
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -125,6 +137,9 @@ jobs:
 
       - name: Setup Rust (stable)
         uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
+
+      - name: Setup sccache
+        uses: mozilla-actions/sccache-action@9e7fa8a12102821edf02ca5dbea1acd0f89a2696 # v0.0.10
 
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@23869a5bd66c73db3c0ac40331f3206eb23791dc # v2.9.1
