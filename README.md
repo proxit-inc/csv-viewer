@@ -15,7 +15,7 @@ Built with **Tauri 2** + **React 18** + **TypeScript** + **DuckDB**.
 - **Multi-tab viewing** — open multiple CSV/TSV files simultaneously, each with its own independent in-memory DuckDB connection
 - **Large file support** — 100,000 rows load in under 3 seconds; virtual scrolling keeps memory under 200 MB
 - **Auto-detection** — delimiter (`,` / `\t` / `;`) and encoding (UTF-8, Shift_JIS, EUC-JP) detected automatically
-- **Full-text search** — `⌘F` opens an inline search bar with result count and keyboard navigation
+- **Full-text search** — `⌘F` opens an inline search bar with result count, keyboard navigation, and matching cells highlighted directly in the grid
 - **Column resizing** — drag headers to resize, double-click to auto-fit
 - **Offline & private** — no network calls, no telemetry, no cloud
 
@@ -54,8 +54,8 @@ Download the latest `.dmg` from the [Releases](https://github.com/proxit-inc/csv
 **Prerequisites**
 
 - [Rust](https://rustup.rs/) 1.70+
-- [Node.js](https://nodejs.org/) 18+
-- [pnpm](https://pnpm.io/) 8+
+- [Node.js](https://nodejs.org/) 22+ (CI builds on Node 24)
+- [pnpm](https://pnpm.io/) 9+
 
 ```bash
 git clone https://github.com/proxit-inc/csv-viewer.git
