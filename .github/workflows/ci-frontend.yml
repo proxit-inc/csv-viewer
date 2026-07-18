@@ -27,7 +27,7 @@ concurrency:
 
 jobs:
   frontend:
-    name: Lint, Format, Type-check, Build
+    name: Lint, Format, Type-check, Test, Build
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout
@@ -55,6 +55,9 @@ jobs:
 
       - name: Type-check (tsc)
         run: pnpm exec tsc --noEmit
+
+      - name: Test (vitest)
+        run: pnpm test
 
       - name: Build (vite)
         run: pnpm build
