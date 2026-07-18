@@ -6,6 +6,10 @@ import "ag-grid-community/styles/ag-theme-alpine.css";
 import type { SearchHit } from "../../types";
 import { createDatasource } from "./datasource";
 
+// Stable reference: recreating this object on every render makes AG-Grid rebuild
+// all columns and discard user-resized widths (issue #7). Defined once at module scope.
+const DEFAULT_COL_DEF: ColDef = { resizable: true, sortable: false };
+
 interface DataGridProps {
   headers: string[];
   totalRows: number;
@@ -159,7 +163,7 @@ export function DataGrid({
         rowModelType="infinite"
         datasource={datasource}
         columnDefs={columnDefs}
-        defaultColDef={{ resizable: true, sortable: false }}
+        defaultColDef={DEFAULT_COL_DEF}
         cacheBlockSize={200}
         cacheOverflowSize={2}
         maxConcurrentDatasourceRequests={1}
