@@ -24,7 +24,7 @@ pub fn search_csv(
     search(&conn, &query)
 }
 
-fn search(conn: &Connection, query: &str) -> Result<SearchResponse, String> {
+pub(crate) fn search(conn: &Connection, query: &str) -> Result<SearchResponse, String> {
     if query.is_empty() {
         return Ok(SearchResponse {
             hits: vec![],
@@ -36,11 +36,16 @@ fn search(conn: &Connection, query: &str) -> Result<SearchResponse, String> {
         .prepare("SELECT column_name FROM (DESCRIBE csv_data)")
         .map_err(|e| e.to_string())?;
 
+    // Skip __row_id (always the first column, see file::load_csv) — it's an
+    // internal ordering aid, not a data column the frontend should see.
     let headers: Vec<String> = stmt
         .query_map([], |r| r.get(0))
         .map_err(|e| e.to_string())?
         .collect::<Result<Vec<_>, _>>()
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| e.to_string())?
+        .into_iter()
+        .skip(1)
+        .collect();
 
     // Escape LIKE metacharacters in the user's query. Backslash must be
     // escaped first so the escapes added for % and _ aren't themselves
@@ -55,16 +60,16 @@ fn search(conn: &Connection, query: &str) -> Result<SearchResponse, String> {
 
     for (col_idx, col_name) in headers.iter().enumerate() {
         let col_escaped = col_name.replace('"', "\"\"");
-        // Compute row numbers over the full table first, then filter.
-        // row_number() OVER () after WHERE would give sequential numbers
-        // for matched rows only (0,1,2...) instead of original positions.
+        // __row_id is a stable ordinal materialized once at load time (see
+        // file::load_csv), so it can be selected directly as each matched
+        // row's position instead of recomputing row_number() OVER () here —
+        // which DuckDB doesn't guarantee stays consistent with the row
+        // numbering get_csv_data_range sees on a separate query.
         // The search pattern is bound as a parameter (not interpolated)
         // so it can't be misinterpreted as SQL or break the ESCAPE clause.
         let sql = format!(
-            "SELECT rn FROM (\
-                SELECT (row_number() OVER () - 1) AS rn, \"{col_escaped}\" \
-                FROM csv_data\
-            ) WHERE CAST(\"{col_escaped}\" AS VARCHAR) LIKE ? ESCAPE '\\' \
+            "SELECT __row_id AS rn FROM csv_data \
+            WHERE CAST(\"{col_escaped}\" AS VARCHAR) LIKE ? ESCAPE '\\' \
             LIMIT {MAX_SEARCH_HITS}"
         );
 
@@ -99,11 +104,11 @@ mod tests {
     fn setup() -> Connection {
         let conn = Connection::open_in_memory().unwrap();
         conn.execute_batch(
-            "CREATE TABLE csv_data (name VARCHAR, note VARCHAR); \
+            "CREATE TABLE csv_data (__row_id INTEGER, name VARCHAR, note VARCHAR); \
              INSERT INTO csv_data VALUES \
-                ('alice', 'a\\b'), \
-                ('bob', '50%'), \
-                ('carol', 'a_b')",
+                (0, 'alice', 'a\\b'), \
+                (1, 'bob', '50%'), \
+                (2, 'carol', 'a_b')",
         )
         .unwrap();
         conn
@@ -134,5 +139,43 @@ mod tests {
         let conn = setup();
         assert_eq!(search(&conn, "50%").unwrap().total_count, 1);
         assert_eq!(search(&conn, "a_b").unwrap().total_count, 1);
+    }
+
+    #[test]
+    fn empty_query_returns_no_hits_without_querying() {
+        let conn = setup();
+        let response = search(&conn, "").expect("empty query should not error");
+        assert_eq!(response.total_count, 0);
+        assert!(response.hits.is_empty());
+    }
+
+    #[test]
+    fn no_hits_for_a_term_that_does_not_appear() {
+        let conn = setup();
+        let response = search(&conn, "nope-not-here").expect("search should not error");
+        assert_eq!(response.total_count, 0);
+    }
+
+    #[test]
+    fn finds_hits_in_the_correct_column_across_a_real_file() {
+        let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../test-data/small.csv");
+        let (conn, metadata) =
+            crate::commands::file::load_csv(path).expect("small.csv should load");
+        let city_col = metadata
+            .headers
+            .iter()
+            .position(|h| h == "city")
+            .expect("small.csv should have a city column");
+
+        let response = search(&conn, "Sapporo").expect("search should not error");
+        assert!(
+            !response.hits.is_empty(),
+            "fixture should contain 'Sapporo'"
+        );
+        assert!(
+            response.hits.iter().all(|h| h.column == city_col),
+            "all 'Sapporo' hits should be in the city column, got {:?}",
+            response.hits
+        );
     }
 }

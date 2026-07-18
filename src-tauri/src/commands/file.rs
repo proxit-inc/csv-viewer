@@ -19,7 +19,7 @@ impl Drop for TempFile {
     }
 }
 
-fn load_csv(path: &str) -> Result<(Connection, FileMetadata), String> {
+pub(crate) fn load_csv(path: &str) -> Result<(Connection, FileMetadata), String> {
     let path = path.to_string();
     // Reject paths containing null bytes to prevent injection.
     if path.contains('\0') {
@@ -60,9 +60,15 @@ fn load_csv(path: &str) -> Result<(Connection, FileMetadata), String> {
 
     // Escape single quotes in path to prevent SQL injection via the file path.
     let escaped_path = load_path.replace('\'', "''");
+    // __row_id is a stable ordinal materialized once at load time, giving
+    // get_csv_data_range and search_csv a shared row identity to ORDER BY.
+    // Without it, DuckDB doesn't guarantee scan order stays consistent
+    // across separate queries on the same table, so a row index from one
+    // command could point at a different row when read by the other.
     conn.execute_batch(&format!(
         "CREATE TABLE csv_data AS \
-         SELECT * FROM read_csv_auto('{}', delim='{}', header=true, ignore_errors=true, all_varchar=true)",
+         SELECT (row_number() OVER () - 1) AS __row_id, * \
+         FROM read_csv_auto('{}', delim='{}', header=true, ignore_errors=true, all_varchar=true)",
         escaped_path, delim_str
     ))
     .map_err(|e| format!("DuckDB load error: {}", e))?;
@@ -77,11 +83,16 @@ fn load_csv(path: &str) -> Result<(Connection, FileMetadata), String> {
         .prepare("SELECT column_name FROM (DESCRIBE csv_data)")
         .map_err(|e| e.to_string())?;
 
+    // Skip __row_id (always the first column, see above) — it's an internal
+    // ordering aid, not a data column the frontend should see.
     let headers: Vec<String> = stmt
         .query_map([], |r| r.get(0))
         .map_err(|e| e.to_string())?
         .collect::<Result<Vec<_>, _>>()
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| e.to_string())?
+        .into_iter()
+        .skip(1)
+        .collect();
 
     let total_columns = headers.len();
     let file_size = std::fs::metadata(&path).map_err(|e| e.to_string())?.len();
@@ -130,7 +141,11 @@ pub fn open_csv_file(
 
 #[tauri::command]
 pub fn close_tab(tab_id: String, state: tauri::State<'_, DuckDBState>) -> Result<(), String> {
-    state.connections.lock().unwrap().remove(&tab_id);
+    close(&state, &tab_id)
+}
+
+fn close(state: &DuckDBState, tab_id: &str) -> Result<(), String> {
+    state.connections.lock().unwrap().remove(tab_id);
     Ok(())
 }
 
@@ -155,5 +170,67 @@ mod tests {
             "expected a decoded Japanese city name, got {:?}",
             city
         );
+    }
+
+    #[test]
+    fn loads_utf8_csv_with_correct_metadata() {
+        let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../test-data/small.csv");
+        let (_conn, metadata) = load_csv(path).expect("small.csv should load");
+
+        assert_eq!(metadata.encoding, "UTF-8");
+        assert_eq!(metadata.delimiter, ",");
+        assert_eq!(metadata.total_rows, 100);
+        assert_eq!(metadata.total_columns, 6);
+        assert_eq!(
+            metadata.headers,
+            vec!["id", "name", "city", "category", "value", "date"]
+        );
+    }
+
+    #[test]
+    fn loads_tab_delimited_file_and_detects_tab_delimiter() {
+        let path = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../test-data/tab_delimited.tsv"
+        );
+        let (_conn, metadata) = load_csv(path).expect("tab_delimited.tsv should load");
+
+        assert_eq!(metadata.delimiter, "\t");
+        assert_eq!(metadata.total_rows, 10_000);
+        assert_eq!(metadata.total_columns, 6);
+    }
+
+    #[test]
+    fn errors_on_missing_file() {
+        let err = load_csv("/no/such/path/does-not-exist.csv").expect_err("should error");
+        assert!(err.contains("Cannot read file"), "got: {err}");
+    }
+
+    #[test]
+    fn rejects_path_containing_a_null_byte() {
+        let err = load_csv("/tmp/evil\0.csv").expect_err("should error");
+        assert!(err.contains("null byte"), "got: {err}");
+    }
+
+    #[test]
+    fn close_removes_the_tabs_connection() {
+        let state = DuckDBState::new();
+        let conn = Connection::open_in_memory().unwrap();
+        state
+            .connections
+            .lock()
+            .unwrap()
+            .insert("tab-1".to_string(), Arc::new(Mutex::new(conn)));
+        assert!(state.connections.lock().unwrap().contains_key("tab-1"));
+
+        close(&state, "tab-1").expect("close should not error");
+
+        assert!(!state.connections.lock().unwrap().contains_key("tab-1"));
+    }
+
+    #[test]
+    fn close_on_an_unknown_tab_id_is_a_no_op() {
+        let state = DuckDBState::new();
+        close(&state, "does-not-exist").expect("close on unknown tab should not error");
     }
 }
