@@ -1,3 +1,5 @@
+use duckdb::{params, Connection};
+
 use crate::{
     state::DuckDBState,
     types::{SearchHit, SearchResponse},
@@ -11,13 +13,6 @@ pub fn search_csv(
     query: String,
     state: tauri::State<'_, DuckDBState>,
 ) -> Result<SearchResponse, String> {
-    if query.is_empty() {
-        return Ok(SearchResponse {
-            hits: vec![],
-            total_count: 0,
-        });
-    }
-
     let connections = state.connections.lock().unwrap();
     let conn_arc = connections
         .get(&tab_id)
@@ -26,6 +21,16 @@ pub fn search_csv(
     drop(connections);
 
     let conn = conn_arc.lock().unwrap();
+    search(&conn, &query)
+}
+
+fn search(conn: &Connection, query: &str) -> Result<SearchResponse, String> {
+    if query.is_empty() {
+        return Ok(SearchResponse {
+            hits: vec![],
+            total_count: 0,
+        });
+    }
 
     let mut stmt = conn
         .prepare("SELECT column_name FROM (DESCRIBE csv_data)")
@@ -37,10 +42,14 @@ pub fn search_csv(
         .collect::<Result<Vec<_>, _>>()
         .map_err(|e| e.to_string())?;
 
+    // Escape LIKE metacharacters in the user's query. Backslash must be
+    // escaped first so the escapes added for % and _ aren't themselves
+    // reinterpreted as escape sequences.
     let escaped = query
-        .replace('\'', "''")
+        .replace('\\', "\\\\")
         .replace('%', "\\%")
         .replace('_', "\\_");
+    let pattern = format!("%{escaped}%");
 
     let mut hits: Vec<SearchHit> = Vec::new();
 
@@ -49,17 +58,19 @@ pub fn search_csv(
         // Compute row numbers over the full table first, then filter.
         // row_number() OVER () after WHERE would give sequential numbers
         // for matched rows only (0,1,2...) instead of original positions.
+        // The search pattern is bound as a parameter (not interpolated)
+        // so it can't be misinterpreted as SQL or break the ESCAPE clause.
         let sql = format!(
             "SELECT rn FROM (\
                 SELECT (row_number() OVER () - 1) AS rn, \"{col_escaped}\" \
                 FROM csv_data\
-            ) WHERE CAST(\"{col_escaped}\" AS VARCHAR) LIKE '%{escaped}%' ESCAPE '\\' \
+            ) WHERE CAST(\"{col_escaped}\" AS VARCHAR) LIKE ? ESCAPE '\\' \
             LIMIT {MAX_SEARCH_HITS}"
         );
 
         let mut stmt = conn.prepare(&sql).map_err(|e| e.to_string())?;
         let row_hits: Vec<usize> = stmt
-            .query_map([], |r| r.get(0))
+            .query_map(params![pattern], |r| r.get(0))
             .map_err(|e| e.to_string())?
             .collect::<Result<Vec<_>, _>>()
             .map_err(|e| e.to_string())?;
@@ -79,4 +90,49 @@ pub fn search_csv(
 
     let total_count = hits.len();
     Ok(SearchResponse { hits, total_count })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn setup() -> Connection {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "CREATE TABLE csv_data (name VARCHAR, note VARCHAR); \
+             INSERT INTO csv_data VALUES \
+                ('alice', 'a\\b'), \
+                ('bob', '50%'), \
+                ('carol', 'a_b')",
+        )
+        .unwrap();
+        conn
+    }
+
+    #[test]
+    fn matches_literal_backslash_in_query() {
+        let conn = setup();
+        let response = search(&conn, "a\\b").expect("search should not error");
+        assert_eq!(response.total_count, 1);
+        assert_eq!(response.hits[0].row, 0);
+    }
+
+    #[test]
+    fn lone_backslash_matches_the_row_containing_it_not_the_percent_row() {
+        let conn = setup();
+        let response = search(&conn, "\\").expect("lone backslash should not error");
+        assert_eq!(response.total_count, 1);
+        assert_eq!(
+            response.hits[0].row, 0,
+            "should match alice's 'a\\b' note (row 0), not bob's '50%' note via a \
+             mis-escaped pattern"
+        );
+    }
+
+    #[test]
+    fn percent_and_underscore_are_matched_literally() {
+        let conn = setup();
+        assert_eq!(search(&conn, "50%").unwrap().total_count, 1);
+        assert_eq!(search(&conn, "a_b").unwrap().total_count, 1);
+    }
 }
