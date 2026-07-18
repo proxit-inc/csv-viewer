@@ -19,7 +19,7 @@ impl Drop for TempFile {
     }
 }
 
-fn load_csv(path: &str) -> Result<(Connection, FileMetadata), String> {
+pub(crate) fn load_csv(path: &str) -> Result<(Connection, FileMetadata), String> {
     let path = path.to_string();
     // Reject paths containing null bytes to prevent injection.
     if path.contains('\0') {
@@ -60,9 +60,15 @@ fn load_csv(path: &str) -> Result<(Connection, FileMetadata), String> {
 
     // Escape single quotes in path to prevent SQL injection via the file path.
     let escaped_path = load_path.replace('\'', "''");
+    // __row_id is a stable ordinal materialized once at load time, giving
+    // get_csv_data_range and search_csv a shared row identity to ORDER BY.
+    // Without it, DuckDB doesn't guarantee scan order stays consistent
+    // across separate queries on the same table, so a row index from one
+    // command could point at a different row when read by the other.
     conn.execute_batch(&format!(
         "CREATE TABLE csv_data AS \
-         SELECT * FROM read_csv_auto('{}', delim='{}', header=true, ignore_errors=true, all_varchar=true)",
+         SELECT (row_number() OVER () - 1) AS __row_id, * \
+         FROM read_csv_auto('{}', delim='{}', header=true, ignore_errors=true, all_varchar=true)",
         escaped_path, delim_str
     ))
     .map_err(|e| format!("DuckDB load error: {}", e))?;
@@ -77,11 +83,16 @@ fn load_csv(path: &str) -> Result<(Connection, FileMetadata), String> {
         .prepare("SELECT column_name FROM (DESCRIBE csv_data)")
         .map_err(|e| e.to_string())?;
 
+    // Skip __row_id (always the first column, see above) — it's an internal
+    // ordering aid, not a data column the frontend should see.
     let headers: Vec<String> = stmt
         .query_map([], |r| r.get(0))
         .map_err(|e| e.to_string())?
         .collect::<Result<Vec<_>, _>>()
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| e.to_string())?
+        .into_iter()
+        .skip(1)
+        .collect();
 
     let total_columns = headers.len();
     let file_size = std::fs::metadata(&path).map_err(|e| e.to_string())?.len();
