@@ -22,7 +22,7 @@ describe("useSearch", () => {
     expect(invokeMock).not.toHaveBeenCalled();
     expect(dispatch).toHaveBeenCalledWith({
       type: "SEARCH_UPDATE",
-      payload: { tabId: "tab-1", query: "", hits: [] },
+      payload: { tabId: "tab-1", query: "", hits: [], truncated: false },
     });
   });
 
@@ -30,6 +30,7 @@ describe("useSearch", () => {
     const response: SearchResponse = {
       hits: [{ row: 0, column: 1 }],
       totalCount: 1,
+      truncated: false,
     };
     invokeMock.mockResolvedValue(response);
     const dispatch = vi.fn();
@@ -42,7 +43,27 @@ describe("useSearch", () => {
     expect(invokeMock).toHaveBeenCalledWith("search_csv", { tabId: "tab-1", query: "needle" });
     expect(dispatch).toHaveBeenCalledWith({
       type: "SEARCH_UPDATE",
-      payload: { tabId: "tab-1", query: "needle", hits: response.hits },
+      payload: { tabId: "tab-1", query: "needle", hits: response.hits, truncated: false },
+    });
+  });
+
+  it("propagates truncated: true from the backend response", async () => {
+    const response: SearchResponse = {
+      hits: [{ row: 0, column: 1 }],
+      totalCount: 10_000,
+      truncated: true,
+    };
+    invokeMock.mockResolvedValue(response);
+    const dispatch = vi.fn();
+    const { result } = renderHook(() => useSearch(dispatch));
+
+    await act(async () => {
+      await result.current.search("tab-1", "needle");
+    });
+
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "SEARCH_UPDATE",
+      payload: { tabId: "tab-1", query: "needle", hits: response.hits, truncated: true },
     });
   });
 

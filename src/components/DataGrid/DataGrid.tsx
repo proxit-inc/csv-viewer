@@ -1,37 +1,43 @@
 import { useMemo, useEffect, useRef } from "react";
 import { AgGridReact } from "ag-grid-react";
-import type { ColDef, GridReadyEvent, CellClassParams } from "ag-grid-community";
+import type { ColDef, GridReadyEvent, CellClassParams, SortChangedEvent } from "ag-grid-community";
 import "ag-grid-community/styles/ag-grid.css";
 import "ag-grid-community/styles/ag-theme-alpine.css";
-import type { SearchHit } from "../../types";
+import type { SearchHit, SortSpec } from "../../types";
 import { createDatasource } from "./datasource";
 
 // Stable reference: recreating this object on every render makes AG-Grid rebuild
 // all columns and discard user-resized widths (issue #7). Defined once at module scope.
-const DEFAULT_COL_DEF: ColDef = { resizable: true, sortable: false };
+const DEFAULT_COL_DEF: ColDef = { resizable: true, sortable: true };
 
 interface DataGridProps {
-  headers: string[];
+  columns: string[];
   totalRows: number;
   tabId: string;
+  generation: number;
   searchHits: SearchHit[];
   currentHitIndex: number;
   initialScrollOffset?: number;
   onScrollSave: (tabId: string, offset: number) => void;
+  sort: SortSpec[];
+  onSortChange: (sort: SortSpec[]) => void;
 }
 
 export function DataGrid({
-  headers,
+  columns,
   totalRows,
   tabId,
+  generation,
   searchHits,
   currentHitIndex,
   initialScrollOffset = 0,
   onScrollSave,
+  sort,
+  onSortChange,
 }: DataGridProps) {
   const gridRef = useRef<AgGridReact>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  const datasource = useMemo(() => createDatasource(tabId), [tabId]);
+  const datasource = useMemo(() => createDatasource(tabId, generation), [tabId, generation]);
 
   // Always-fresh refs so unmount cleanup never holds stale values.
   const onScrollSaveRef = useRef(onScrollSave);
@@ -98,32 +104,60 @@ export function DataGrid({
           paddingRight: "10px",
         },
       },
-      ...headers.map((header, idx) => ({
-        headerName: header,
-        field: `col_${idx}`,
-        width: 150,
-        resizable: true,
-        sortable: false,
-        filter: false,
-        cellStyle: (params: CellClassParams) => {
-          const base = { fontFamily: "var(--font-mono)", fontSize: "12px" };
-          const rowIdx = params.rowIndex;
-          const hits = searchHitsRef.current;
-          const curIdx = currentHitIndexRef.current;
-          const currentHit = hits[curIdx];
+      ...columns.map((column, idx) => {
+        // Seeds AG-Grid's sort indicator from the tracked sort state. This
+        // only matters at mount time: apply/clear bumps `generation`, which
+        // remounts DataGrid entirely (see App.tsx's key), so there's no
+        // "runtime" case where the indicator would otherwise reset without
+        // this — but without it, the very next mount after a sort-triggered
+        // apply would render with no arrow at all.
+        const activeSort = sort.find((s) => s.column === column);
+        const sortDirection: "asc" | "desc" | null = activeSort
+          ? activeSort.descending
+            ? "desc"
+            : "asc"
+          : null;
+        return {
+          headerName: column,
+          field: `col_${idx}`,
+          width: 150,
+          resizable: true,
+          sortable: true,
+          filter: false,
+          sort: sortDirection,
+          sortIndex: activeSort ? sort.indexOf(activeSort) : null,
+          cellStyle: (params: CellClassParams) => {
+            const base = { fontFamily: "var(--font-mono)", fontSize: "12px" };
+            const rowIdx = params.rowIndex;
+            const hits = searchHitsRef.current;
+            const curIdx = currentHitIndexRef.current;
+            const currentHit = hits[curIdx];
 
-          if (currentHit?.row === rowIdx && currentHit?.column === idx) {
-            return { ...base, backgroundColor: "#FDE68A", color: "#92400E" };
-          }
-          if (hitKeySetRef.current.has(`${rowIdx}:${idx}`)) {
-            return { ...base, backgroundColor: "#FEF9C3" };
-          }
-          return base;
-        },
-      })),
+            if (currentHit?.row === rowIdx && currentHit?.column === idx) {
+              return { ...base, backgroundColor: "#FDE68A", color: "#92400E" };
+            }
+            if (hitKeySetRef.current.has(`${rowIdx}:${idx}`)) {
+              return { ...base, backgroundColor: "#FEF9C3" };
+            }
+            return base;
+          },
+        };
+      }),
     ],
-    [headers],
+    [columns, sort],
   );
+
+  const handleSortChanged = (e: SortChangedEvent) => {
+    const next: SortSpec[] = e.api
+      .getColumnState()
+      .filter((s) => s.sort != null)
+      .sort((a, b) => (a.sortIndex ?? 0) - (b.sortIndex ?? 0))
+      .map((s) => ({
+        column: columns[Number(s.colId.replace("col_", ""))],
+        descending: s.sort === "desc",
+      }));
+    onSortChange(next);
+  };
 
   const onGridReady = (params: GridReadyEvent) => {
     params.api.setGridOption("datasource", datasource);
@@ -179,6 +213,7 @@ export function DataGrid({
         suppressCellFocus={true}
         enableCellTextSelection={true}
         onGridReady={onGridReady}
+        onSortChanged={handleSortChanged}
         onBodyScroll={(e) => {
           // Keep ref current for the unmount-save fallback (mid-scroll tab switch).
           if (Date.now() <= ignoreScrollUntilRef.current) return;
