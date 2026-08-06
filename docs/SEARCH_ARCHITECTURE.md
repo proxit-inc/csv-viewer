@@ -28,6 +28,33 @@
 - SQLは**結果集合を差し替える方式**。
 - 安全境界は多層防御とする（詳細は§4）。
 
+### 0-1. アーキテクチャ概観
+
+```mermaid
+flowchart LR
+    subgraph FE["Frontend"]
+        SB["SearchBar<br/>(text / where / sql モード)"]
+        DG["DataGrid<br/>(AG-Grid Infinite Row Model)"]
+    end
+
+    subgraph BE["Backend — タブごとの DuckDB Connection"]
+        TS["TabSession<br/>generation カウンタ"]
+        CD[("csv_data<br/>__row_id")]
+        CR[("csv_result<br/>__view_row_id<br/>(実体化ビュー)")]
+    end
+
+    SB -- "apply_query(Where / Sql)" --> TS
+    TS -- "CREATE OR REPLACE TABLE" --> CR
+    CD -. "元テーブル" .-> CR
+    DG -- "get_csv_data_range(tabId, generation)" --> TS
+    TS -- "csv_result があればそちら、<br/>なければ csv_data を返す" --> DG
+
+    style CD fill:#eef,stroke:#88a
+    style CR fill:#efe,stroke:#8a8
+```
+
+`text`モードはこのビュー・パイプラインを経由せず、現在表示中のビュー（`csv_result`または`csv_data`）に対して直接ハイライト用のヒット検索を行う（§2-5）。`where`/`sql`モードはビューそのものを差し替える。
+
 既存コードで見つかった問題点も併せて修正対象とする：
 - `search()`の`total_count`はtruncate**後**の件数のため、10,000件超のとき打ち切りが伝わらない
 - 列ごとに`LIMIT 10,000`を掛けてから全体truncateしているため、ヒットが**左側の列に偏る**
@@ -171,10 +198,27 @@ let handle = conn.interrupt_handle();
 
 参考資料の「Instant SQL」の本質は*カーソル位置の部分実行*ではなく**「実行ボタンを押す前に結果が見えている」**ことなので、そこだけ取る。
 
-```
-キーストローク → 200ms アイドル → preview_query（LIMIT 100固定, timeout 2s）
-                                    └─ 成功: プレビューパネル更新 / 失敗: エディタ下に赤いエラー1行
-              → ⌘Enter or Enter → apply_query（グリッド本体に反映）
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant FE as SearchBar (Frontend)
+    participant BE as Backend (Tauri command)
+    participant DB as DuckDB (csv_data / csv_result)
+
+    U->>FE: キーストローク
+    FE->>FE: 200ms アイドル待ち（デバウンス）
+    FE->>BE: preview_query(request_id, sql)
+    BE->>DB: SELECT ... LIMIT 100（現在のビューに対して）
+    DB-->>BE: rows
+    BE-->>FE: QueryPreview
+    FE->>FE: プレビューパネル更新<br/>（失敗時は直前の成功結果を残しエラーのみ重ねる）
+
+    U->>FE: ⌘Enter
+    FE->>BE: apply_query(sql)
+    BE->>DB: CREATE OR REPLACE TABLE csv_result AS ...
+    DB-->>BE: ok (generation++)
+    BE-->>FE: QueryOutcome
+    FE->>FE: DataGrid の key を更新 → グリッド再作成
 ```
 
 100k行×VARCHARのLIKE/比較フィルタはDuckDBで数ms〜十数ms。プレビューp95 **150ms以内**を目標。失敗中のプレビューで画面を空にせず、**直前の成功結果を残したままエラーだけ重ねる**のが体感を左右する。
@@ -215,6 +259,22 @@ csv_data) LIMIT 1; DROP TABLE csv_data; --
 さらに、ラップ後の外側`) LIMIT N`は末尾コメント（`--`）で無効化できるため、**行数上限としても機能しない**。
 
 ### 4-2. 採用する安全設計
+
+```mermaid
+flowchart TD
+    A["ユーザーSQL入力"] --> B{"duckdb_extract_statements で<br/>ステートメント数を検証"}
+    B -- "count != 1" --> C["QueryError を返し拒否<br/>（prepare()には渡さない）"]
+    B -- "count == 1" --> D["SELECT * FROM ( user_sql ) LIMIT N<br/>でラップ"]
+    D --> E["conn.prepare() で実行"]
+    E --> F{"結果列に csv_data 由来の<br/>__row_id が残っているか"}
+    F -- "残っている" --> G["has_source_row_id = true"]
+    F -- "残っていない" --> H["has_source_row_id = false"]
+    G --> I["csv_result へ実体化<br/>（__view_row_id を付与）"]
+    H --> I
+
+    style C fill:#fee,stroke:#c66
+    style B fill:#ffe,stroke:#cc6
+```
 
 **(a) ステートメント数の自前検証を必須の第一防壁にする**
 
@@ -266,6 +326,22 @@ SQLの構文エラーは入力中に常時起きるため、**グローバルな
 ---
 
 ## 5. 移行・段階計画
+
+```mermaid
+flowchart LR
+    S1["Step 1<br/>text検索の単一クエリ化<br/>🟢 リスクほぼゼロ"]
+    S2["Step 2<br/>ビュー・パイプライン導入<br/>+ whereモード<br/>🟡 中リスク"]
+    S25["Step 2.5<br/>単一ステートメント検証<br/>🔴 必須ゲート"]
+    S3["Step 3<br/>sqlモード + CodeMirror<br/>🟡 中リスク"]
+    S4["Step 4<br/>Phase2 Sort/Filter有効化<br/>🟢 低リスク"]
+    S5["Step 5（任意）<br/>クエリ履歴等<br/>🟢 低リスク"]
+
+    S1 --> S2 --> S25 --> S3 --> S4 --> S5
+
+    style S25 fill:#fee,stroke:#c66,stroke-width:2px
+```
+
+Step 2.5は「通過しない限りStep 3（生SQL実行）に進んではならない」ゲートとして独立させている（§4-1参照）。
 
 | Step | 内容 | リスク |
 |---|---|---|
