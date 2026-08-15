@@ -116,9 +116,7 @@ export default function App() {
 
   useEffect(() => {
     const title = activeTab?.filename ? `${activeTab.filename} — CSV Viewer` : "CSV Viewer";
-    getCurrentWindow()
-      .setTitle(title)
-      .catch(console.error);
+    getCurrentWindow().setTitle(title).catch(console.error);
   }, [activeTab?.filename]);
 
   useKeyboardShortcuts({
