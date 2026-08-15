@@ -268,8 +268,8 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       const { tabId, message } = action.payload;
       return {
         ...state,
-        tabs: state.tabs.map(
-          (t): CsvTab => (t.id === tabId ? { ...t, connectionError: message } : t),
+        tabs: state.tabs.map((t): CsvTab =>
+          t.id === tabId ? { ...t, connectionError: message } : t,
         ),
       };
     }
@@ -295,28 +295,27 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       // response from the new session and the grid stays permanently blank.
       return {
         ...state,
-        tabs: state.tabs.map(
-          (t): CsvTab =>
-            t.id === tabId
-              ? {
-                  ...t,
-                  isLoading: true,
-                  metadata: null,
-                  generation: 0,
-                  resultView: null,
-                  preview: null,
-                  queryStatus: { state: "idle" },
-                  searchHits: [],
-                  searchQuery: "",
-                  searchHitIndex: 0,
-                  searchTruncated: false,
-                  sort: [],
-                  scrollOffset: 0,
-                  connectionError: null,
-                  encodingOverride: encoding,
-                  dismissedNotices: { encoding: false, largeRows: false },
-                }
-              : t,
+        tabs: state.tabs.map((t): CsvTab =>
+          t.id === tabId
+            ? {
+                ...t,
+                isLoading: true,
+                metadata: null,
+                generation: 0,
+                resultView: null,
+                preview: null,
+                queryStatus: { state: "idle" },
+                searchHits: [],
+                searchQuery: "",
+                searchHitIndex: 0,
+                searchTruncated: false,
+                sort: [],
+                scrollOffset: 0,
+                connectionError: null,
+                encodingOverride: encoding,
+                dismissedNotices: { encoding: false, largeRows: false },
+              }
+            : t,
         ),
       };
     }
@@ -325,11 +324,10 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       const { tabId, notice } = action.payload;
       return {
         ...state,
-        tabs: state.tabs.map(
-          (t): CsvTab =>
-            t.id === tabId
-              ? { ...t, dismissedNotices: { ...t.dismissedNotices, [notice]: true } }
-              : t,
+        tabs: state.tabs.map((t): CsvTab =>
+          t.id === tabId
+            ? { ...t, dismissedNotices: { ...t.dismissedNotices, [notice]: true } }
+            : t,
         ),
       };
     }
