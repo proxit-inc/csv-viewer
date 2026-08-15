@@ -27,6 +27,16 @@ export function useFileOpen(dispatch: React.Dispatch<AppAction>) {
         searchQuery: "",
         searchHits: [],
         searchHitIndex: 0,
+        searchTruncated: false,
+        isSearchOpen: false,
+        generation: 0,
+        searchMode: "text",
+        queryDrafts: { where: "", sql: "" },
+        queryStatus: { state: "idle" },
+        resultView: null,
+        preview: null,
+        sort: [],
+        queryHistory: { where: [], sql: [] },
       },
     });
 

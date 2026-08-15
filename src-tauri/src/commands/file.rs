@@ -1,10 +1,11 @@
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use duckdb::Connection;
 
 use crate::{
+    commands::view,
     csv::{delimiter::detect_delimiter, encoding::detect_encoding},
-    state::DuckDBState,
+    state::{DuckDBState, TabSession},
     types::FileMetadata,
 };
 
@@ -83,24 +84,24 @@ pub(crate) fn load_csv(path: &str) -> Result<(Connection, FileMetadata), String>
 
     drop(temp_file);
 
+    // Lock the engine down once loading is complete. `enable_external_access`
+    // must be disabled AFTER read_csv_auto has run (disabling it first would
+    // break the load itself), and `lock_configuration` must be set LAST:
+    // once it's true, every `SET` except `schema`/`search_path` is rejected —
+    // including future engine-tuning settings (threads, memory_limit,
+    // preserve_insertion_order, ...), so any of those must be added to this
+    // batch above the lock line, never after it.
+    conn.execute_batch(
+        "SET enable_external_access = false; \
+         SET lock_configuration = true;",
+    )
+    .map_err(|e| format!("DuckDB lockdown error: {}", e))?;
+
     let total_rows: usize = conn
         .query_row("SELECT COUNT(*) FROM csv_data", [], |r| r.get(0))
         .map_err(|e| e.to_string())?;
 
-    let mut stmt = conn
-        .prepare("SELECT column_name FROM (DESCRIBE csv_data)")
-        .map_err(|e| e.to_string())?;
-
-    // Skip __row_id (always the first column, see above) — it's an internal
-    // ordering aid, not a data column the frontend should see.
-    let headers: Vec<String> = stmt
-        .query_map([], |r| r.get(0))
-        .map_err(|e| e.to_string())?
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(|e| e.to_string())?
-        .into_iter()
-        .skip(1)
-        .collect();
+    let headers = view::display_columns(&conn, view::BASE_TABLE).map_err(|e| e.to_string())?;
 
     let total_columns = headers.len();
     let file_size = std::fs::metadata(&path).map_err(|e| e.to_string())?.len();
@@ -138,11 +139,8 @@ pub fn open_csv_file(
 ) -> Result<FileMetadata, String> {
     let (conn, metadata) = load_csv(&path)?;
 
-    state
-        .connections
-        .lock()
-        .unwrap()
-        .insert(tab_id, Arc::new(Mutex::new(conn)));
+    let session = TabSession::new(conn, metadata.total_rows, metadata.headers.clone());
+    state.tabs.lock().unwrap().insert(tab_id, Arc::new(session));
 
     Ok(metadata)
 }
@@ -153,7 +151,7 @@ pub fn close_tab(tab_id: String, state: tauri::State<'_, DuckDBState>) -> Result
 }
 
 fn close(state: &DuckDBState, tab_id: &str) -> Result<(), String> {
-    state.connections.lock().unwrap().remove(tab_id);
+    state.tabs.lock().unwrap().remove(tab_id);
     Ok(())
 }
 
@@ -258,21 +256,51 @@ mod tests {
     fn close_removes_the_tabs_connection() {
         let state = DuckDBState::new();
         let conn = Connection::open_in_memory().unwrap();
+        let session = TabSession::new(conn, 0, vec![]);
         state
-            .connections
+            .tabs
             .lock()
             .unwrap()
-            .insert("tab-1".to_string(), Arc::new(Mutex::new(conn)));
-        assert!(state.connections.lock().unwrap().contains_key("tab-1"));
+            .insert("tab-1".to_string(), Arc::new(session));
+        assert!(state.tabs.lock().unwrap().contains_key("tab-1"));
 
         close(&state, "tab-1").expect("close should not error");
 
-        assert!(!state.connections.lock().unwrap().contains_key("tab-1"));
+        assert!(!state.tabs.lock().unwrap().contains_key("tab-1"));
     }
 
     #[test]
     fn close_on_an_unknown_tab_id_is_a_no_op() {
         let state = DuckDBState::new();
         close(&state, "does-not-exist").expect("close on unknown tab should not error");
+    }
+
+    #[test]
+    fn external_access_is_disabled_after_load() {
+        let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../test-data/small.csv");
+        let (conn, _metadata) = load_csv(path).expect("small.csv should load");
+
+        let err = conn
+            .execute_batch("SELECT * FROM read_csv_auto('/etc/passwd')")
+            .expect_err("external file access should be blocked after lockdown");
+        assert!(
+            err.to_string().to_lowercase().contains("disabled")
+                || err.to_string().to_lowercase().contains("external"),
+            "expected an external-access error, got: {err}"
+        );
+    }
+
+    #[test]
+    fn configuration_is_locked_after_load() {
+        let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../test-data/small.csv");
+        let (conn, _metadata) = load_csv(path).expect("small.csv should load");
+
+        let err = conn
+            .execute_batch("SET enable_external_access = true")
+            .expect_err("re-enabling a locked setting should be rejected");
+        assert!(
+            err.to_string().to_lowercase().contains("lock"),
+            "expected a configuration-locked error, got: {err}"
+        );
     }
 }

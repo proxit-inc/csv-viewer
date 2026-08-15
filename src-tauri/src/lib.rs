@@ -1,5 +1,6 @@
 mod commands;
 mod csv;
+mod sql;
 mod state;
 mod types;
 
@@ -15,6 +16,9 @@ pub fn run() {
             commands::file::close_tab,
             commands::data::get_csv_data_range,
             commands::search::search_csv,
+            commands::query::apply_query,
+            commands::query::preview_query,
+            commands::query::clear_query,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

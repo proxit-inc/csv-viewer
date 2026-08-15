@@ -4,7 +4,10 @@ import type { SearchResponse, AppAction } from "../types";
 export function useSearch(dispatch: React.Dispatch<AppAction>) {
   const search = async (tabId: string, query: string) => {
     if (!query.trim()) {
-      dispatch({ type: "SEARCH_UPDATE", payload: { tabId, query: "", hits: [] } });
+      dispatch({
+        type: "SEARCH_UPDATE",
+        payload: { tabId, query: "", hits: [], truncated: false },
+      });
       return;
     }
 
@@ -12,7 +15,7 @@ export function useSearch(dispatch: React.Dispatch<AppAction>) {
       const result = await invoke<SearchResponse>("search_csv", { tabId, query });
       dispatch({
         type: "SEARCH_UPDATE",
-        payload: { tabId, query, hits: result.hits },
+        payload: { tabId, query, hits: result.hits, truncated: result.truncated },
       });
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);

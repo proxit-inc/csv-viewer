@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-macOS desktop app for viewing large CSV files (100k rows) across multiple tabs. Read-only viewer in Phase 1; sort/filter in Phase 2. Built with Tauri 2 (Rust backend) + React 18 (TypeScript frontend).
+macOS desktop app for viewing large CSV files (100k rows) across multiple tabs. Read-only: viewing, text search, column sort, and `where`/`sql` querying — nothing ever writes back to the file. Built with Tauri 2 (Rust backend) + React 18 (TypeScript frontend).
 
 ## Commands
 
@@ -46,16 +46,29 @@ All data processing happens in Rust. The frontend never reads files directly —
 
 ### Backend State Model
 
-Each tab owns an independent DuckDB in-memory connection, held as `Mutex<HashMap<String, Arc<Mutex<Connection>>>>` in `src-tauri/src/state.rs` (keyed by `tab_id`; each connection is individually `Arc<Mutex<_>>`-wrapped so a command can clone the handle and drop the outer map lock before running its query). When a tab closes, its entry is removed, the connection is dropped, and memory is freed.
+Each tab owns an independent DuckDB in-memory connection plus its current view state, held in `src-tauri/src/state.rs` as `DuckDBState { tabs: Mutex<HashMap<String, Arc<TabSession>>> }` (keyed by `tab_id`). `DuckDBState::session()` locks the map, clones the `Arc<TabSession>`, and drops the map lock so a command can hold the tab's own connection lock without holding the (unrelated) map lock.
+
+`TabSession` holds:
+- `conn: Arc<Mutex<Connection>>`
+- `result: Mutex<Option<ResultView>>` — the materialized `csv_result` table from the last applied `where`/`sql` query (`table`, `total_rows`, `src_row_id_col`); `None` means the grid reads `csv_data` directly
+- `generation: AtomicU64` — bumped by every `apply_query`/`clear_query`; echoed in `DataRange` so the frontend can discard responses for a superseded view
+- `base_total_rows` / `base_columns` — captured at load, used by `clear_query` and by `apply_query`'s post-execution check that the query didn't mutate `csv_data`
+
+`TabSession::current_view()` returns `(table, generation, source_row_id_column)` — the single source of truth every command uses to know what to read. When a tab closes, its entry is removed, the connection is dropped, and memory is freed.
 
 ### IPC Commands (`src-tauri/src/commands/`)
 
 | Command | Purpose |
 |---|---|
-| `open_csv_file(path, tab_id)` | Detect encoding/delimiter → load into DuckDB → return `FileMetadata` |
-| `get_csv_data_range(tab_id, start_row, end_row)` | `SELECT * EXCLUDE (__row_id) FROM csv_data ORDER BY __row_id LIMIT n OFFSET m` → return `DataRange` |
-| `search_csv(tab_id, query)` | Full-table text search → return `SearchResponse` with hit rows |
-| `close_tab(tab_id)` | Drop DuckDB connection, free memory |
+| `open_csv_file(path, tab_id)` | Detect encoding/delimiter → load into DuckDB → lock the connection down (`enable_external_access=false`, `lock_configuration=true`) → return `FileMetadata` |
+| `get_csv_data_range(tab_id, start_row, end_row, generation)` | Page the tab's *current view* (`csv_data` or `csv_result`) ordered by its ordinal column → return `DataRange` (rows, `generation`, original `row_ids` when the view still carries them). A stale request `generation` is ignored, not an error — the frontend discards mismatched responses |
+| `search_csv(tab_id, query)` | Text search over the current view (capped at 10,000 hits) → return `SearchResponse` |
+| `apply_query(tab_id, request)` | Run a `where` predicate (+ optional sort) or a `sql` SELECT against the current view, materialize it as `csv_result` via CTAS, bump `generation` → return `QueryOutcome` |
+| `preview_query(tab_id, request, request_id)` | Same query, run read-only (`SELECT … LIMIT 100` inside a rolled-back transaction) for the live preview panel → return `QueryPreview` |
+| `clear_query(tab_id)` | Drop `csv_result`, revert the view to `csv_data`, bump `generation` |
+| `close_tab(tab_id)` | Drop the `TabSession` (and its connection), free memory |
+
+`apply_query`/`preview_query` are `async` and run the blocking DB work on `spawn_blocking` with a watchdog that calls `InterruptHandle::interrupt()` on timeout (10 s apply / 2 s preview). Every user-authored SQL string must pass through `sql::validate::assert_single_statement` + `sql::wrap_ctas`/`wrap_select` — `Connection::prepare()` alone is *not* a security boundary (it executes all but the last statement of a multi-statement input).
 
 ### Virtual Scrolling
 
@@ -63,7 +76,7 @@ AG-Grid Infinite Row Model drives all data fetching. `src/components/DataGrid/da
 
 ### Frontend State
 
-`src/store/appReducer.ts` uses `useReducer` (Redux-like) for global state (`tabs`, `activeTabId`, `isSearchOpen`, `errorMessage`). Tab lifecycle logic lives in the reducer itself (`TAB_ADD`/`TAB_CLOSE`/`TAB_SWITCH`) wired up in `App.tsx` — there is no `useTabManager` hook. The hooks (`useFileOpen`, `useSearch`, `useKeyboardShortcuts`, `useDebounce`) dispatch actions — no prop drilling. Backend command failures surface via the `SET_ERROR`/`CLEAR_ERROR` actions that set `state.errorMessage`.
+`src/store/appReducer.ts` uses `useReducer` (Redux-like). Global `AppState` is only `tabs`, `activeTabId`, `errorMessage` — everything search/query related is **per tab** on `CsvTab` (`isSearchOpen`, `searchMode`, `queryDrafts.{where,sql}`, `queryStatus`, `resultView`, `preview`, `sort`, `queryHistory`, `generation`), so switching tabs never leaks one tab's search state onto another. Tab lifecycle logic lives in the reducer itself (`TAB_ADD`/`TAB_CLOSE`/`TAB_SWITCH`) wired up in `App.tsx` — there is no `useTabManager` hook. The hooks (`useFileOpen`, `useSearch`, `useQuery`, `useKeyboardShortcuts`, `useDebounce`) dispatch actions — no prop drilling. Backend command failures surface via the `SET_ERROR`/`CLEAR_ERROR` actions that set `state.errorMessage`; query failures instead land in the active tab's `queryStatus` (cleared automatically on the next `QUERY_DRAFT_SET`).
 
 ### Frontend Directory Layout
 
@@ -75,13 +88,17 @@ src/
 │   ├── Toolbar.tsx
 │   ├── TabBar/{TabBar,Tab}.tsx
 │   ├── FileInfoBar.tsx
-│   ├── SearchBar.tsx              # shown only when ⌘F active
+│   ├── SearchBar.tsx              # text/where/sql mode switch, shown only when ⌘F active
+│   ├── SqlEditor.tsx              # CodeMirror 6, lazy-loaded on first sql-mode open
+│   ├── QueryPreviewPanel.tsx      # ≤100-row live preview under the editor
+│   ├── ResultBar.tsx              # "csv_data (100,000 rows)" → "… → filtered (n rows)" + Reset
+│   ├── CopyButton.tsx
 │   ├── DataGrid/{DataGrid.tsx,datasource.ts}
 │   ├── EmptyState.tsx
 │   ├── LoadingState.tsx           # shown while a tab's file loads
 │   ├── ErrorBoundary.tsx          # catches render errors
 │   └── StatusBar.tsx
-├── hooks/{useFileOpen,useSearch,useKeyboardShortcuts,useDebounce}.ts
+├── hooks/{useFileOpen,useSearch,useQuery,useKeyboardShortcuts,useDebounce}.ts
 ├── store/appReducer.ts
 └── types/index.ts
 ```
@@ -91,20 +108,25 @@ src/
 ```
 src-tauri/src/
 ├── main.rs / lib.rs
-├── state.rs         # DuckDB connection map (Mutex-wrapped)
-├── types.rs         # FileMetadata, DataRange, SearchHit, etc.
-├── commands/{mod,file,data,search}.rs
+├── state.rs         # DuckDBState → per-tab TabSession (conn, ResultView, generation)
+├── types.rs         # FileMetadata, DataRange, QueryRequest/Outcome, CsvError, etc.
+├── commands/
+│   ├── {mod,file,data,search}.rs
+│   ├── query.rs     # apply_query / preview_query / clear_query + timeout watchdog
+│   └── view.rs      # csv_data / csv_result table + internal column-name rules
+├── sql/{mod,validate,wrap}.rs   # single-statement gate + CTAS/SELECT wrapping
 └── csv/{mod,encoding,delimiter}.rs
 ```
 
 ## Key Technical Decisions
 
 - **DuckDB `read_csv_auto`** (from the `duckdb` crate, pinned to 1.x with the `bundled` feature) is used for initial load. Encoding is detected *before* passing to DuckDB — `chardetng`/`encoding_rs` in `csv/encoding.rs` — and the delimiter is chosen by a hand-rolled `detect_delimiter` in `csv/delimiter.rs` (there is no `csv` crate dependency). At load time a `__row_id` ordinal column is materialized so `get_csv_data_range` and `search_csv` share a stable row identity to `ORDER BY`.
-- **Reference implementation**: [Duckling](https://github.com/l1xnan/duckling) is the primary reference for Tauri + DuckDB IPC patterns. Strip out Parquet, DB connections, SQL console, and schema browser — keep DuckDB connection management, `read_csv_auto` usage, encoding detection, and the AG-Grid datasource pattern.
-- **Phase 2 hooks**: Sort/filter UI buttons are rendered but `disabled` in Phase 1. The DuckDB columnar store makes adding `ORDER BY` / `WHERE` to `get_csv_data_range` straightforward later.
+- **Reference implementation**: [Duckling](https://github.com/l1xnan/duckling) is the primary reference for Tauri + DuckDB IPC patterns. Strip out Parquet, DB connections, and the schema browser (the search bar's `sql` mode already covers that need) — keep DuckDB connection management, `read_csv_auto` usage, encoding detection, and the AG-Grid datasource pattern.
+- **View pipeline**: `where`/`sql` queries are not appended to `get_csv_data_range`'s SQL — `apply_query` materializes `csv_result` (`CREATE OR REPLACE TABLE`, capped at `sql::MAX_RESULT_ROWS` = 1M) and every subsequent read goes through `TabSession::current_view()`. A `where` apply is rewritten against the *current* view, so filters chain automatically; a `sql` apply passes the user's statement through verbatim, so it chains only if it names `csv_result` itself. `clear_query` drops back to `csv_data`. See `docs/SEARCH_ARCHITECTURE.md` for the full design.
+- **Sort**: header clicks dispatch `SORT_SET` and re-`apply_query` the tab's current predicate (or `1=1`) with the new sort, so sorting composes with an active filter instead of resetting it. All columns are `VARCHAR` (`all_varchar=true` at load), so a column whose values all parse as numbers is ordered by `TRY_CAST(... AS DOUBLE) … NULLS LAST` rather than lexicographically. The toolbar's Sort button only *clears* the sort; Filter opens the search bar in `where` mode.
 - **Tauri v2 import paths**: `invoke` is from `@tauri-apps/api/core`, `open` dialog is from `@tauri-apps/plugin-dialog` (different from v1).
-- **`DataGrid` key prop**: `key={activeTab.id}` forces AG-Grid instance recreation on tab switch.
-- **`get_csv_data_range` is sync**: DuckDB `Connection` is not `Send`, so avoid `async`.
+- **`DataGrid` key prop**: keyed on `` `${activeTab.id}:${activeTab.generation}` `` — forces AG-Grid instance recreation on tab switch *and* on every view change (apply/clear), so column defs, the block cache, and scroll position all reset together.
+- **`get_csv_data_range` is sync**: it's a fast, bounded paging query (≤500 rows) that isn't worth a thread hop — not a `Send` restriction. DuckDB's `Connection` *is* `Send` (it is `!Sync`, which the `Arc<Mutex<_>>` already handles); this is what lets `apply_query`/`preview_query` move a `TabSession` onto `spawn_blocking`.
 
 ## Performance Targets
 

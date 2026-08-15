@@ -3,10 +3,20 @@ import { FolderOpen, Search, ArrowUpDown, Filter } from "lucide-react";
 interface ToolbarProps {
   onOpen: () => void;
   onSearch: () => void;
+  onFilter: () => void;
+  onClearSort: () => void;
+  hasSort: boolean;
   hasFile: boolean;
 }
 
-export function Toolbar({ onOpen, onSearch, hasFile }: ToolbarProps) {
+export function Toolbar({
+  onOpen,
+  onSearch,
+  onFilter,
+  onClearSort,
+  hasSort,
+  hasFile,
+}: ToolbarProps) {
   return (
     <div
       className="flex items-center gap-1 px-2 border-b"
@@ -40,20 +50,22 @@ export function Toolbar({ onOpen, onSearch, hasFile }: ToolbarProps) {
       </button>
 
       <button
-        disabled
-        className="flex items-center gap-1.5 px-3 py-1.5 rounded text-sm opacity-40 cursor-not-allowed"
+        onClick={onClearSort}
+        disabled={!hasSort}
+        className="flex items-center gap-1.5 px-3 py-1.5 rounded text-sm hover:bg-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
         style={{ color: "var(--col-text)" }}
-        title="Sort (Phase 2)"
+        title={hasSort ? "Clear sort" : "Sort — click a column header"}
       >
         <ArrowUpDown size={14} />
         Sort
       </button>
 
       <button
-        disabled
-        className="flex items-center gap-1.5 px-3 py-1.5 rounded text-sm opacity-40 cursor-not-allowed"
+        onClick={onFilter}
+        disabled={!hasFile}
+        className="flex items-center gap-1.5 px-3 py-1.5 rounded text-sm hover:bg-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
         style={{ color: "var(--col-text)" }}
-        title="Filter (Phase 2)"
+        title="Filter"
       >
         <Filter size={14} />
         Filter
