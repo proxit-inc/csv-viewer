@@ -84,10 +84,12 @@ AG-Grid Infinite Row Model drives all data fetching. `src/components/DataGrid/da
 src/
 ├── App.tsx                        # root, global state wiring
 ├── components/
-│   ├── TitleBar.tsx               # macOS traffic lights
 │   ├── Toolbar.tsx
 │   ├── TabBar/{TabBar,Tab}.tsx
 │   ├── FileInfoBar.tsx
+│   ├── NoticeBar.tsx              # shared warning/error banner shell (tone + dismiss)
+│   ├── EncodingNotice.tsx         # low-confidence encoding warning + "Reopen as" picker
+│   ├── LargeFileNotice.tsx        # large-row-count warning + Close file
 │   ├── SearchBar.tsx              # text/where/sql mode switch, shown only when ⌘F active
 │   ├── SqlEditor.tsx              # CodeMirror 6, lazy-loaded on first sql-mode open
 │   ├── QueryPreviewPanel.tsx      # ≤100-row live preview under the editor
