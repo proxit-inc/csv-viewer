@@ -1,11 +1,11 @@
 import { useReducer, useEffect, useCallback, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { v4 as uuid } from "uuid";
 import type { SortSpec } from "./types";
 import { LARGE_FILE_ROW_THRESHOLD } from "./types";
 import { appReducer, initialState } from "./store/appReducer";
-import { TitleBar } from "./components/TitleBar";
 import { Toolbar } from "./components/Toolbar";
 import { TabBar } from "./components/TabBar/TabBar";
 import { FileInfoBar } from "./components/FileInfoBar";
@@ -114,6 +114,11 @@ export default function App() {
     };
   }, []); // single registration for the lifetime of the app
 
+  useEffect(() => {
+    const title = activeTab?.filename ? `${activeTab.filename} — CSV Viewer` : "CSV Viewer";
+    getCurrentWindow().setTitle(title).catch(console.error);
+  }, [activeTab?.filename]);
+
   useKeyboardShortcuts({
     onOpen: () => openFile(uuid()),
     onSearch: () =>
@@ -159,8 +164,6 @@ export default function App() {
 
   return (
     <div className="app-shell">
-      <TitleBar filename={activeTab?.filename ?? null} />
-
       <Toolbar
         onOpen={() => openFile(uuid())}
         onSearch={() =>
