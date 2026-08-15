@@ -264,6 +264,76 @@ export function appReducer(state: AppState, action: AppAction): AppState {
     case "CLEAR_ERROR":
       return { ...state, errorMessage: null };
 
+    case "TAB_ERROR_SET": {
+      const { tabId, message } = action.payload;
+      return {
+        ...state,
+        tabs: state.tabs.map(
+          (t): CsvTab => (t.id === tabId ? { ...t, connectionError: message } : t),
+        ),
+      };
+    }
+
+    case "TAB_ERROR_CLEAR": {
+      const { tabId } = action.payload;
+      const target = state.tabs.find((t) => t.id === tabId);
+      // No-op when already clear — this fires on every successful
+      // get_csv_data_range response, so returning a fresh object each time
+      // would re-render the whole app on every scroll block.
+      if (!target || target.connectionError === null) return state;
+      return {
+        ...state,
+        tabs: state.tabs.map((t): CsvTab => (t.id === tabId ? { ...t, connectionError: null } : t)),
+      };
+    }
+
+    case "TAB_RELOAD_START": {
+      const { tabId, encoding } = action.payload;
+      // The backend creates a brand-new session at generation 0 with no
+      // ResultView, so every field derived from the old session must reset
+      // too — otherwise datasource.ts's generation check discards every
+      // response from the new session and the grid stays permanently blank.
+      return {
+        ...state,
+        tabs: state.tabs.map(
+          (t): CsvTab =>
+            t.id === tabId
+              ? {
+                  ...t,
+                  isLoading: true,
+                  metadata: null,
+                  generation: 0,
+                  resultView: null,
+                  preview: null,
+                  queryStatus: { state: "idle" },
+                  searchHits: [],
+                  searchQuery: "",
+                  searchHitIndex: 0,
+                  searchTruncated: false,
+                  sort: [],
+                  scrollOffset: 0,
+                  connectionError: null,
+                  encodingOverride: encoding,
+                  dismissedNotices: { encoding: false, largeRows: false },
+                }
+              : t,
+        ),
+      };
+    }
+
+    case "NOTICE_DISMISS": {
+      const { tabId, notice } = action.payload;
+      return {
+        ...state,
+        tabs: state.tabs.map(
+          (t): CsvTab =>
+            t.id === tabId
+              ? { ...t, dismissedNotices: { ...t.dismissedNotices, [notice]: true } }
+              : t,
+        ),
+      };
+    }
+
     default:
       return state;
   }

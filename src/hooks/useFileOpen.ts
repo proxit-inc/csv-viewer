@@ -2,8 +2,13 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { invoke } from "@tauri-apps/api/core";
 import type { FileMetadata, AppAction } from "../types";
 
+interface OpenFileOptions {
+  encoding?: string;
+  reload?: boolean;
+}
+
 export function useFileOpen(dispatch: React.Dispatch<AppAction>) {
-  const openFile = async (tabId: string, forcePath?: string) => {
+  const openFile = async (tabId: string, forcePath?: string, opts?: OpenFileOptions) => {
     let path: string | null = forcePath ?? null;
 
     if (!path) {
@@ -15,38 +20,58 @@ export function useFileOpen(dispatch: React.Dispatch<AppAction>) {
       path = selected;
     }
 
-    dispatch({
-      type: "TAB_ADD",
-      payload: {
-        id: tabId,
-        filePath: path,
-        filename: path.split("/").pop() ?? "file.csv",
-        metadata: null,
-        isLoading: true,
-        scrollOffset: 0,
-        searchQuery: "",
-        searchHits: [],
-        searchHitIndex: 0,
-        searchTruncated: false,
-        isSearchOpen: false,
-        generation: 0,
-        searchMode: "text",
-        queryDrafts: { where: "", sql: "" },
-        queryStatus: { state: "idle" },
-        resultView: null,
-        preview: null,
-        sort: [],
-        queryHistory: { where: [], sql: [] },
-      },
-    });
+    if (opts?.reload) {
+      dispatch({
+        type: "TAB_RELOAD_START",
+        payload: { tabId, encoding: opts.encoding ?? null },
+      });
+    } else {
+      dispatch({
+        type: "TAB_ADD",
+        payload: {
+          id: tabId,
+          filePath: path,
+          filename: path.split("/").pop() ?? "file.csv",
+          metadata: null,
+          isLoading: true,
+          scrollOffset: 0,
+          searchQuery: "",
+          searchHits: [],
+          searchHitIndex: 0,
+          searchTruncated: false,
+          isSearchOpen: false,
+          generation: 0,
+          searchMode: "text",
+          queryDrafts: { where: "", sql: "" },
+          queryStatus: { state: "idle" },
+          resultView: null,
+          preview: null,
+          sort: [],
+          queryHistory: { where: [], sql: [] },
+          connectionError: null,
+          encodingOverride: null,
+          dismissedNotices: { encoding: false, largeRows: false },
+        },
+      });
+    }
 
     try {
-      const metadata = await invoke<FileMetadata>("open_csv_file", { path, tabId });
+      const metadata = await invoke<FileMetadata>("open_csv_file", {
+        path,
+        tabId,
+        encoding: opts?.encoding,
+      });
       dispatch({ type: "TAB_METADATA_LOADED", payload: { tabId, metadata } });
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       console.error("Failed to open file:", msg);
       dispatch({ type: "TAB_CLOSE", payload: { tabId } });
+      // A failed reload leaves no backend session behind for open_csv_file to
+      // have inserted (it only inserts on success), but a *previous*
+      // successful load's session is still alive — close_tab frees it. Also
+      // safe (and a no-op backend-side) on a failed initial open, where no
+      // session was ever created.
+      if (opts?.reload) invoke("close_tab", { tabId }).catch(console.error);
       dispatch({ type: "SET_ERROR", payload: `Failed to open file: ${msg}` });
     }
   };

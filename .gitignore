@@ -30,3 +30,6 @@ src-tauri/gen/
 # Icons
 src-tauri/icons/android/
 src-tauri/icons/ios/
+
+# Large opt-in test fixtures (generate_test_data.py --large) — too big to commit
+test-data/large_*.csv

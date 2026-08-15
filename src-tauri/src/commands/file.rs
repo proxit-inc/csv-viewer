@@ -9,6 +9,27 @@ use crate::{
     types::FileMetadata,
 };
 
+/// Resolves the encoding to load with: an explicit override wins outright
+/// (the user picked it, so it's confident by definition), falling back to
+/// automatic detection otherwise. Returns `Err` for a label that doesn't map
+/// to any known encoding (`encoding_rs::Encoding::for_label` uses the WHATWG
+/// label registry, so this rejects typos/unsupported names up front rather
+/// than surfacing a confusing failure later in the load).
+fn resolve_encoding(
+    raw: &[u8],
+    encoding_override: Option<&str>,
+) -> Result<(&'static encoding_rs::Encoding, bool), String> {
+    match encoding_override {
+        Some(label) => encoding_rs::Encoding::for_label(label.as_bytes())
+            .map(|enc| (enc, true))
+            .ok_or_else(|| format!("Unknown encoding: {}", label)),
+        None => {
+            let detection = detect_encoding(raw);
+            Ok((detection.encoding, detection.confident))
+        }
+    }
+}
+
 const DELIMITER_SAMPLE_BYTES: usize = 8_192;
 
 /// Removes its temp file on drop, regardless of which branch returns early.
@@ -20,7 +41,10 @@ impl Drop for TempFile {
     }
 }
 
-pub(crate) fn load_csv(path: &str) -> Result<(Connection, FileMetadata), String> {
+pub(crate) fn load_csv(
+    path: &str,
+    encoding_override: Option<&str>,
+) -> Result<(Connection, FileMetadata), String> {
     let path = path.to_string();
     // Reject paths containing null bytes to prevent injection.
     if path.contains('\0') {
@@ -29,8 +53,18 @@ pub(crate) fn load_csv(path: &str) -> Result<(Connection, FileMetadata), String>
 
     let raw = std::fs::read(&path).map_err(|e| format!("Cannot read file: {}", e))?;
 
-    let encoding = detect_encoding(&raw);
-    let (decoded, _, _) = encoding.decode(&raw);
+    let (encoding, mut confident) = resolve_encoding(&raw, encoding_override)?;
+    let (decoded, _, had_errors) = encoding.decode(&raw);
+    // Detection only samples the first ENCODING_SAMPLE_BYTES; `decode` covers
+    // the whole file, so a replacement-character substitution past that
+    // sample is evidence the guess was wrong even when chardetng itself
+    // reported confidence. Doesn't apply to an explicit override — the user
+    // chose it deliberately, and had_errors there just means the file
+    // genuinely isn't in that encoding (see the temp-file condition below,
+    // which still loads the lossily-decoded text rather than erroring).
+    if encoding_override.is_none() && had_errors {
+        confident = false;
+    }
 
     // Truncate the delimiter sample at a UTF-8 char boundary. `decoded.len()` is a
     // byte length, so a raw `&decoded[..DELIMITER_SAMPLE_BYTES]` slice panics when
@@ -45,8 +79,13 @@ pub(crate) fn load_csv(path: &str) -> Result<(Connection, FileMetadata), String>
 
     // DuckDB's read_csv_auto assumes UTF-8. For non-UTF-8 source files, write the
     // already-decoded text to a UTF-8 temp file and load from that instead of the
-    // original (raw-encoded) path.
-    let temp_file = if encoding != encoding_rs::UTF_8 {
+    // original (raw-encoded) path. Also written when `had_errors` even for a
+    // nominally-UTF-8 encoding: this is reachable via an explicit override (e.g.
+    // the user manually picks UTF-8 for a file that isn't actually UTF-8) — without
+    // this, DuckDB would read the raw, invalid bytes directly and fail with a
+    // low-level "Invalid unicode" error instead of loading the lossily-decoded
+    // (U+FFFD-substituted) text the user asked to see.
+    let temp_file = if encoding != encoding_rs::UTF_8 || had_errors {
         let temp_path =
             std::env::temp_dir().join(format!("csv-viewer-{}.csv", uuid::Uuid::new_v4()));
         std::fs::write(&temp_path, decoded.as_bytes())
@@ -125,6 +164,7 @@ pub(crate) fn load_csv(path: &str) -> Result<(Connection, FileMetadata), String>
             total_rows,
             total_columns,
             encoding: encoding.name().to_string(),
+            encoding_confident: confident,
             delimiter: delimiter_str,
             headers,
         },
@@ -135,9 +175,10 @@ pub(crate) fn load_csv(path: &str) -> Result<(Connection, FileMetadata), String>
 pub fn open_csv_file(
     path: String,
     tab_id: String,
+    encoding: Option<String>,
     state: tauri::State<'_, DuckDBState>,
 ) -> Result<FileMetadata, String> {
-    let (conn, metadata) = load_csv(&path)?;
+    let (conn, metadata) = load_csv(&path, encoding.as_deref())?;
 
     let session = TabSession::new(conn, metadata.total_rows, metadata.headers.clone());
     state.tabs.lock().unwrap().insert(tab_id, Arc::new(session));
@@ -160,12 +201,47 @@ mod tests {
     use super::*;
 
     #[test]
+    fn an_explicit_encoding_override_wins_over_detection() {
+        let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../test-data/sjis_sample.csv");
+        let (conn, metadata) = load_csv(path, Some("shift_jis"))
+            .expect("override with the correct encoding should load");
+
+        assert_eq!(metadata.encoding, "Shift_JIS");
+        assert!(metadata.encoding_confident);
+
+        let city: String = conn
+            .query_row("SELECT city FROM csv_data LIMIT 1", [], |r| r.get(0))
+            .expect("should read decoded city column");
+        assert!(["東京", "大阪", "名古屋", "福岡", "札幌"].contains(&city.as_str()));
+    }
+
+    #[test]
+    fn a_wrong_override_still_loads_instead_of_erroring() {
+        // Regression for the had_errors temp-file fix: without it, DuckDB
+        // would be handed the raw Shift_JIS bytes directly (no temp file is
+        // written for a nominal UTF-8 encoding) and fail with a low-level
+        // "Invalid unicode" error instead of loading lossily-decoded text.
+        let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../test-data/sjis_sample.csv");
+        let (_conn, metadata) =
+            load_csv(path, Some("utf-8")).expect("a wrong override should still load, not error");
+        assert_eq!(metadata.encoding, "UTF-8");
+    }
+
+    #[test]
+    fn an_unknown_encoding_label_is_rejected() {
+        let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../test-data/small.csv");
+        let err = load_csv(path, Some("not-a-real-encoding")).expect_err("should error");
+        assert!(err.contains("not-a-real-encoding"), "got: {err}");
+    }
+
+    #[test]
     fn loads_shift_jis_file_without_corrupting_multibyte_text() {
         let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../test-data/sjis_sample.csv");
-        let (conn, metadata) = load_csv(path).expect("shift_jis file should load");
+        let (conn, metadata) = load_csv(path, None).expect("shift_jis file should load");
 
         assert_eq!(metadata.encoding, "Shift_JIS");
         assert_eq!(metadata.total_rows, 10_000);
+        assert!(metadata.encoding_confident);
 
         let city: String = conn
             .query_row("SELECT city FROM csv_data LIMIT 1", [], |r| r.get(0))
@@ -206,7 +282,7 @@ mod tests {
         let _cleanup = TempFile(temp_path.clone());
 
         let (_conn, metadata) =
-            load_csv(temp_path.to_str().unwrap()).expect("should load without panicking");
+            load_csv(temp_path.to_str().unwrap(), None).expect("should load without panicking");
         assert_eq!(metadata.encoding, "UTF-8");
         assert_eq!(metadata.delimiter, ",");
         assert_eq!(metadata.total_rows, row);
@@ -215,9 +291,10 @@ mod tests {
     #[test]
     fn loads_utf8_csv_with_correct_metadata() {
         let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../test-data/small.csv");
-        let (_conn, metadata) = load_csv(path).expect("small.csv should load");
+        let (_conn, metadata) = load_csv(path, None).expect("small.csv should load");
 
         assert_eq!(metadata.encoding, "UTF-8");
+        assert!(metadata.encoding_confident);
         assert_eq!(metadata.delimiter, ",");
         assert_eq!(metadata.total_rows, 100);
         assert_eq!(metadata.total_columns, 6);
@@ -233,7 +310,7 @@ mod tests {
             env!("CARGO_MANIFEST_DIR"),
             "/../test-data/tab_delimited.tsv"
         );
-        let (_conn, metadata) = load_csv(path).expect("tab_delimited.tsv should load");
+        let (_conn, metadata) = load_csv(path, None).expect("tab_delimited.tsv should load");
 
         assert_eq!(metadata.delimiter, "\t");
         assert_eq!(metadata.total_rows, 10_000);
@@ -242,13 +319,13 @@ mod tests {
 
     #[test]
     fn errors_on_missing_file() {
-        let err = load_csv("/no/such/path/does-not-exist.csv").expect_err("should error");
+        let err = load_csv("/no/such/path/does-not-exist.csv", None).expect_err("should error");
         assert!(err.contains("Cannot read file"), "got: {err}");
     }
 
     #[test]
     fn rejects_path_containing_a_null_byte() {
-        let err = load_csv("/tmp/evil\0.csv").expect_err("should error");
+        let err = load_csv("/tmp/evil\0.csv", None).expect_err("should error");
         assert!(err.contains("null byte"), "got: {err}");
     }
 
@@ -278,7 +355,7 @@ mod tests {
     #[test]
     fn external_access_is_disabled_after_load() {
         let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../test-data/small.csv");
-        let (conn, _metadata) = load_csv(path).expect("small.csv should load");
+        let (conn, _metadata) = load_csv(path, None).expect("small.csv should load");
 
         let err = conn
             .execute_batch("SELECT * FROM read_csv_auto('/etc/passwd')")
@@ -293,7 +370,7 @@ mod tests {
     #[test]
     fn configuration_is_locked_after_load() {
         let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../test-data/small.csv");
-        let (conn, _metadata) = load_csv(path).expect("small.csv should load");
+        let (conn, _metadata) = load_csv(path, None).expect("small.csv should load");
 
         let err = conn
             .execute_batch("SET enable_external_access = true")

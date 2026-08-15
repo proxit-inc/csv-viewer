@@ -23,6 +23,9 @@ function makeTab(id: string, overrides: Partial<CsvTab> = {}): CsvTab {
     preview: null,
     sort: [],
     queryHistory: { where: [], sql: [] },
+    connectionError: null,
+    encodingOverride: null,
+    dismissedNotices: { encoding: false, largeRows: false },
     ...overrides,
   };
 }
@@ -119,6 +122,7 @@ describe("appReducer", () => {
       totalRows: 10,
       totalColumns: 2,
       encoding: "UTF-8",
+      encodingConfident: true,
       delimiter: ",",
       headers: ["id", "name"],
     };
@@ -420,5 +424,101 @@ describe("appReducer", () => {
 
     const cleared = appReducer(withError, { type: "CLEAR_ERROR" });
     expect(cleared.errorMessage).toBeNull();
+  });
+
+  describe("TAB_ERROR_SET / TAB_ERROR_CLEAR", () => {
+    it("sets connectionError for the matching tab only", () => {
+      const tabs = [makeTab("a"), makeTab("b")];
+      const state = appReducer(stateWithTabs(tabs, "a"), {
+        type: "TAB_ERROR_SET",
+        payload: { tabId: "a", message: "DuckDB error: boom" },
+      });
+
+      expect(state.tabs.find((t) => t.id === "a")!.connectionError).toBe("DuckDB error: boom");
+      expect(state.tabs.find((t) => t.id === "b")!.connectionError).toBeNull();
+    });
+
+    it("clears connectionError for the matching tab", () => {
+      const tabs = [makeTab("a", { connectionError: "boom" })];
+      const state = appReducer(stateWithTabs(tabs, "a"), {
+        type: "TAB_ERROR_CLEAR",
+        payload: { tabId: "a" },
+      });
+
+      expect(state.tabs[0].connectionError).toBeNull();
+    });
+
+    it("returns the same state reference when clearing an already-clear error", () => {
+      const tabs = [makeTab("a", { connectionError: null })];
+      const before = stateWithTabs(tabs, "a");
+      const after = appReducer(before, { type: "TAB_ERROR_CLEAR", payload: { tabId: "a" } });
+
+      expect(after).toBe(before);
+    });
+  });
+
+  it("NOTICE_DISMISS sets only the named notice for the named tab", () => {
+    const tabs = [makeTab("a"), makeTab("b")];
+    const state = appReducer(stateWithTabs(tabs, "a"), {
+      type: "NOTICE_DISMISS",
+      payload: { tabId: "a", notice: "largeRows" },
+    });
+
+    const tabA = state.tabs.find((t) => t.id === "a")!;
+    const tabB = state.tabs.find((t) => t.id === "b")!;
+    expect(tabA.dismissedNotices).toEqual({ encoding: false, largeRows: true });
+    expect(tabB.dismissedNotices).toEqual({ encoding: false, largeRows: false });
+  });
+
+  it("TAB_RELOAD_START resets generation, resultView, searchHits and sort so the grid does not discard the new session's responses", () => {
+    const tabs = [
+      makeTab("a", {
+        isLoading: false,
+        metadata: {
+          filename: "a.csv",
+          filePath: "/tmp/a.csv",
+          fileSize: 10,
+          totalRows: 5,
+          totalColumns: 1,
+          encoding: "Shift_JIS",
+          encodingConfident: false,
+          delimiter: ",",
+          headers: ["a"],
+        },
+        generation: 3,
+        resultView: makeOutcome({ generation: 3 }),
+        preview: { requestId: 1, columns: [], rows: [], elapsedMs: 0, busy: false, error: null },
+        queryStatus: { state: "error", message: "boom" },
+        searchHits: [{ row: 0, column: 0 }],
+        searchQuery: "foo",
+        searchHitIndex: 1,
+        searchTruncated: true,
+        sort: [{ column: "a", descending: true }],
+        scrollOffset: 42,
+        connectionError: "boom",
+        dismissedNotices: { encoding: true, largeRows: true },
+      }),
+    ];
+    const state = appReducer(stateWithTabs(tabs, "a"), {
+      type: "TAB_RELOAD_START",
+      payload: { tabId: "a", encoding: "windows-1252" },
+    });
+
+    const tabA = state.tabs[0];
+    expect(tabA.isLoading).toBe(true);
+    expect(tabA.metadata).toBeNull();
+    expect(tabA.generation).toBe(0);
+    expect(tabA.resultView).toBeNull();
+    expect(tabA.preview).toBeNull();
+    expect(tabA.queryStatus).toEqual({ state: "idle" });
+    expect(tabA.searchHits).toEqual([]);
+    expect(tabA.searchQuery).toBe("");
+    expect(tabA.searchHitIndex).toBe(0);
+    expect(tabA.searchTruncated).toBe(false);
+    expect(tabA.sort).toEqual([]);
+    expect(tabA.scrollOffset).toBe(0);
+    expect(tabA.connectionError).toBeNull();
+    expect(tabA.encodingOverride).toBe("windows-1252");
+    expect(tabA.dismissedNotices).toEqual({ encoding: false, largeRows: false });
   });
 });

@@ -21,6 +21,7 @@ interface DataGridProps {
   onScrollSave: (tabId: string, offset: number) => void;
   sort: SortSpec[];
   onSortChange: (sort: SortSpec[]) => void;
+  onFetchStatus: (tabId: string, error: string | null) => void;
 }
 
 export function DataGrid({
@@ -34,10 +35,10 @@ export function DataGrid({
   onScrollSave,
   sort,
   onSortChange,
+  onFetchStatus,
 }: DataGridProps) {
   const gridRef = useRef<AgGridReact>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  const datasource = useMemo(() => createDatasource(tabId, generation), [tabId, generation]);
 
   // Always-fresh refs so unmount cleanup never holds stale values.
   const onScrollSaveRef = useRef(onScrollSave);
@@ -46,6 +47,18 @@ export function DataGrid({
     onScrollSaveRef.current = onScrollSave;
     tabIdRef.current = tabId;
   });
+
+  // Ref-wrapped so a changing parent callback never rebuilds the memoized
+  // datasource below (whose deps are deliberately just [tabId, generation]).
+  const onFetchStatusRef = useRef(onFetchStatus);
+  useEffect(() => {
+    onFetchStatusRef.current = onFetchStatus;
+  });
+
+  const datasource = useMemo(
+    () => createDatasource(tabId, generation, (error) => onFetchStatusRef.current(tabId, error)),
+    [tabId, generation],
+  );
 
   // Stores the current scroll position in PIXELS (not row index) so save/restore
   // is pixel-perfect and unaffected by partial-row rounding in getFirstDisplayedRowIndex().

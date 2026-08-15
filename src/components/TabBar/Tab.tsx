@@ -1,14 +1,15 @@
-import { X } from "lucide-react";
+import { AlertTriangle, X } from "lucide-react";
 
 interface TabProps {
   id: string;
   filename: string;
   isActive: boolean;
+  errorMessage?: string | null;
   onSwitch: () => void;
   onClose: () => void;
 }
 
-export function Tab({ filename, isActive, onSwitch, onClose }: TabProps) {
+export function Tab({ filename, isActive, errorMessage, onSwitch, onClose }: TabProps) {
   return (
     <div
       onClick={onSwitch}
@@ -31,6 +32,16 @@ export function Tab({ filename, isActive, onSwitch, onClose }: TabProps) {
       >
         {filename}
       </span>
+      {errorMessage && (
+        <span title={errorMessage} className="flex items-center shrink-0">
+          <AlertTriangle
+            size={10}
+            role="img"
+            aria-label="Connection error"
+            style={{ color: "#B45309" }}
+          />
+        </span>
+      )}
       <button
         onClick={(e) => {
           e.stopPropagation();

@@ -39,6 +39,7 @@ describe("useFileOpen", () => {
       totalRows: 5,
       totalColumns: 2,
       encoding: "UTF-8",
+      encodingConfident: true,
       delimiter: ",",
       headers: ["id", "name"],
     };
@@ -77,6 +78,93 @@ describe("useFileOpen", () => {
     expect(dispatch).toHaveBeenNthCalledWith(3, {
       type: "SET_ERROR",
       payload: "Failed to open file: bad file",
+    });
+    expect(invokeMock).not.toHaveBeenCalledWith("close_tab", expect.anything());
+  });
+
+  it("passes the chosen encoding through to open_csv_file", async () => {
+    const metadata: FileMetadata = {
+      filename: "data.csv",
+      filePath: "/tmp/data.csv",
+      fileSize: 1234,
+      totalRows: 5,
+      totalColumns: 2,
+      encoding: "windows-1252",
+      encodingConfident: true,
+      delimiter: ",",
+      headers: ["id", "name"],
+    };
+    invokeMock.mockResolvedValue(metadata);
+    const dispatch = vi.fn();
+    const { result } = renderHook(() => useFileOpen(dispatch));
+
+    await act(async () => {
+      await result.current.openFile("tab-1", "/tmp/data.csv", {
+        encoding: "windows-1252",
+        reload: true,
+      });
+    });
+
+    expect(invokeMock).toHaveBeenCalledWith("open_csv_file", {
+      path: "/tmp/data.csv",
+      tabId: "tab-1",
+      encoding: "windows-1252",
+    });
+  });
+
+  it("dispatches TAB_RELOAD_START instead of TAB_ADD when reloading", async () => {
+    const metadata: FileMetadata = {
+      filename: "data.csv",
+      filePath: "/tmp/data.csv",
+      fileSize: 1234,
+      totalRows: 5,
+      totalColumns: 2,
+      encoding: "Shift_JIS",
+      encodingConfident: true,
+      delimiter: ",",
+      headers: ["id", "name"],
+    };
+    invokeMock.mockResolvedValue(metadata);
+    const dispatch = vi.fn();
+    const { result } = renderHook(() => useFileOpen(dispatch));
+
+    await act(async () => {
+      await result.current.openFile("tab-1", "/tmp/data.csv", {
+        encoding: "shift_jis",
+        reload: true,
+      });
+    });
+
+    expect(dispatch).toHaveBeenNthCalledWith(1, {
+      type: "TAB_RELOAD_START",
+      payload: { tabId: "tab-1", encoding: "shift_jis" },
+    });
+    expect(dispatch).toHaveBeenNthCalledWith(2, {
+      type: "TAB_METADATA_LOADED",
+      payload: { tabId: "tab-1", metadata },
+    });
+  });
+
+  it("closes the tab and calls close_tab when a reload fails", async () => {
+    invokeMock.mockImplementation((cmd: string) => {
+      if (cmd === "open_csv_file") return Promise.reject(new Error("bad encoding"));
+      return Promise.resolve();
+    });
+    const dispatch = vi.fn();
+    const { result } = renderHook(() => useFileOpen(dispatch));
+
+    await act(async () => {
+      await result.current.openFile("tab-1", "/tmp/data.csv", {
+        encoding: "not-a-real-encoding",
+        reload: true,
+      });
+    });
+
+    expect(dispatch).toHaveBeenNthCalledWith(2, { type: "TAB_CLOSE", payload: { tabId: "tab-1" } });
+    expect(invokeMock).toHaveBeenCalledWith("close_tab", { tabId: "tab-1" });
+    expect(dispatch).toHaveBeenNthCalledWith(3, {
+      type: "SET_ERROR",
+      payload: "Failed to open file: bad encoding",
     });
   });
 });

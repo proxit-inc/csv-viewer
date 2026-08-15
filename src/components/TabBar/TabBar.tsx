@@ -4,6 +4,7 @@ import { Tab } from "./Tab";
 interface TabItem {
   id: string;
   filename: string;
+  errorMessage?: string | null;
 }
 
 interface TabBarProps {
@@ -31,6 +32,7 @@ export function TabBar({ tabs, activeTabId, onSwitch, onClose, onAdd }: TabBarPr
           id={tab.id}
           filename={tab.filename}
           isActive={tab.id === activeTabId}
+          errorMessage={tab.errorMessage}
           onSwitch={() => onSwitch(tab.id)}
           onClose={() => onClose(tab.id)}
         />

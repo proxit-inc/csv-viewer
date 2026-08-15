@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { v4 as uuid } from "uuid";
 import type { SortSpec } from "./types";
+import { LARGE_FILE_ROW_THRESHOLD } from "./types";
 import { appReducer, initialState } from "./store/appReducer";
 import { TitleBar } from "./components/TitleBar";
 import { Toolbar } from "./components/Toolbar";
@@ -15,6 +16,8 @@ import { EmptyState } from "./components/EmptyState";
 import { LoadingState } from "./components/LoadingState";
 import { StatusBar } from "./components/StatusBar";
 import { ErrorBoundary } from "./components/ErrorBoundary";
+import { LargeFileNotice } from "./components/LargeFileNotice";
+import { EncodingNotice } from "./components/EncodingNotice";
 import { useFileOpen } from "./hooks/useFileOpen";
 import { useQuery } from "./hooks/useQuery";
 import { useKeyboardShortcuts } from "./hooks/useKeyboardShortcuts";
@@ -59,6 +62,17 @@ export default function App() {
   const handleScrollSave = useCallback(
     (tabId: string, offset: number) =>
       dispatch({ type: "TAB_SCROLL_SAVE", payload: { tabId, offset } }),
+    [dispatch],
+  );
+
+  const handleFetchStatus = useCallback(
+    (tabId: string, error: string | null) => {
+      dispatch(
+        error
+          ? { type: "TAB_ERROR_SET", payload: { tabId, message: error } }
+          : { type: "TAB_ERROR_CLEAR", payload: { tabId } },
+      );
+    },
     [dispatch],
   );
 
@@ -138,6 +152,7 @@ export default function App() {
         onScrollSave={handleScrollSave}
         sort={activeTab.sort}
         onSortChange={handleSortChange}
+        onFetchStatus={handleFetchStatus}
       />
     );
   };
@@ -162,7 +177,11 @@ export default function App() {
       />
 
       <TabBar
-        tabs={state.tabs.map((t) => ({ id: t.id, filename: t.filename }))}
+        tabs={state.tabs.map((t) => ({
+          id: t.id,
+          filename: t.filename,
+          errorMessage: t.connectionError,
+        }))}
         activeTabId={state.activeTabId}
         onSwitch={(id) => dispatch({ type: "TAB_SWITCH", payload: { tabId: id } })}
         onClose={handleCloseTab}
@@ -170,6 +189,39 @@ export default function App() {
       />
 
       {activeTab?.metadata && <FileInfoBar metadata={activeTab.metadata} />}
+
+      {activeTab?.metadata &&
+        (!activeTab.metadata.encodingConfident || activeTab.encodingOverride) &&
+        !activeTab.dismissedNotices.encoding && (
+          <EncodingNotice
+            currentEncoding={activeTab.metadata.encoding}
+            wasOverridden={activeTab.encodingOverride !== null}
+            onReload={(label) =>
+              openFile(activeTab.id, activeTab.filePath, { encoding: label, reload: true })
+            }
+            onDismiss={() =>
+              dispatch({
+                type: "NOTICE_DISMISS",
+                payload: { tabId: activeTab.id, notice: "encoding" },
+              })
+            }
+          />
+        )}
+
+      {activeTab?.metadata &&
+        activeTab.metadata.totalRows > LARGE_FILE_ROW_THRESHOLD &&
+        !activeTab.dismissedNotices.largeRows && (
+          <LargeFileNotice
+            totalRows={activeTab.metadata.totalRows}
+            onClose={() => handleCloseTab(activeTab.id)}
+            onDismiss={() =>
+              dispatch({
+                type: "NOTICE_DISMISS",
+                payload: { tabId: activeTab.id, notice: "largeRows" },
+              })
+            }
+          />
+        )}
 
       {activeTab?.isSearchOpen && activeTab.metadata && (
         <SearchBar

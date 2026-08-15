@@ -12,6 +12,7 @@ const metadata: FileMetadata = {
   totalRows: 100,
   totalColumns: 6,
   encoding: "UTF-8",
+  encodingConfident: true,
   delimiter: ",",
   headers: ["id", "name", "city", "category", "value", "date"],
 };
