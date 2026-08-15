@@ -346,6 +346,62 @@ mod tests {
         assert!(!state.tabs.lock().unwrap().contains_key("tab-1"));
     }
 
+    /// Regression guard for the "File load (100k rows) < 3 s" target in
+    /// CLAUDE.md's performance table.
+    ///
+    /// Run with `cargo test loads_100k_rows -- --ignored --nocapture`.
+    /// `#[ignore]`d like the search micro-benches: wall-clock timing on a
+    /// shared CI runner is noisy enough that this would flake as a default
+    /// test, so it's an explicit, opt-in check (also run before a release).
+    ///
+    /// Noise handling: the first load is discarded as a warm-up (it pays for
+    /// the OS page cache being cold and for DuckDB's one-time initialization),
+    /// then the *fastest* of the measured runs is compared against the budget.
+    /// A regression that pushes the load past 3 s shows up in the best run
+    /// too, whereas a single unlucky run scheduled off-core does not.
+    #[test]
+    #[ignore]
+    fn loads_100k_rows_within_the_performance_budget() {
+        const BUDGET: std::time::Duration = std::time::Duration::from_secs(3);
+        const MEASURED_RUNS: usize = 3;
+
+        let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../test-data/utf8_100k.csv");
+
+        // Committed fixture, but regenerate-able — point at the script rather
+        // than failing with a bare "Cannot read file".
+        assert!(
+            std::path::Path::new(path).exists(),
+            "missing fixture {path} — run `python generate_test_data.py` from the repo root"
+        );
+
+        let warmup = {
+            let start = std::time::Instant::now();
+            let (_conn, metadata) = load_csv(path, None).expect("utf8_100k.csv should load");
+            // Guard against the budget being met by a truncated/wrong fixture.
+            assert_eq!(
+                metadata.total_rows, 100_000,
+                "fixture should hold 100k rows — regenerate with `python generate_test_data.py`"
+            );
+            start.elapsed()
+        };
+
+        let mut timings = Vec::with_capacity(MEASURED_RUNS);
+        for _ in 0..MEASURED_RUNS {
+            let start = std::time::Instant::now();
+            let (_conn, _metadata) = load_csv(path, None).expect("utf8_100k.csv should load");
+            timings.push(start.elapsed());
+        }
+
+        let best = *timings.iter().min().expect("MEASURED_RUNS > 0");
+        println!("load utf8_100k.csv — warm-up: {warmup:?}, runs: {timings:?}, best: {best:?}");
+
+        assert!(
+            best < BUDGET,
+            "load of 100k rows took {best:?} (best of {MEASURED_RUNS} runs, all: {timings:?}), \
+             over the {BUDGET:?} budget in CLAUDE.md"
+        );
+    }
+
     #[test]
     fn close_on_an_unknown_tab_id_is_a_no_op() {
         let state = DuckDBState::new();
