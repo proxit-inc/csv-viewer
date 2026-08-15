@@ -60,8 +60,8 @@ Each tab owns an independent DuckDB in-memory connection plus its current view s
 
 | Command | Purpose |
 |---|---|
-| `open_csv_file(path, tab_id)` | Detect encoding/delimiter → load into DuckDB → lock the connection down (`enable_external_access=false`, `lock_configuration=true`) → return `FileMetadata` |
-| `get_csv_data_range(tab_id, start_row, end_row, generation)` | Page the tab's *current view* (`csv_data` or `csv_result`) ordered by its ordinal column → return `DataRange` (rows, `generation`, original `row_ids` when the view still carries them). A stale request `generation` is ignored, not an error — the frontend discards mismatched responses |
+| `open_csv_file(path, tab_id, encoding?)` | Detect encoding/delimiter (or use the optional `encoding` override — a WHATWG label resolved via `encoding_rs::Encoding::for_label`) → load into DuckDB → lock the connection down (`enable_external_access=false`, `lock_configuration=true`) → return `FileMetadata` (including `encoding_confident`) |
+| `get_csv_data_range(tab_id, start_row, end_row, generation)` | Page the tab's *current view* (`csv_data` or `csv_result`) ordered by its ordinal column → return `DataRange` (rows, `generation`, original `row_ids` when the view still carries them). A stale request `generation` is ignored, not an error — the frontend discards mismatched responses. The only command whose error crosses IPC as a discriminated `CommandError { code, message }` rather than a bare string — `code` is `tabNotFound` (an ordinary close/switch race, not shown to the user) or `connection`/`internal` (drives the tab's ⚠ icon) |
 | `search_csv(tab_id, query)` | Text search over the current view (capped at 10,000 hits) → return `SearchResponse` |
 | `apply_query(tab_id, request)` | Run a `where` predicate (+ optional sort) or a `sql` SELECT against the current view, materialize it as `csv_result` via CTAS, bump `generation` → return `QueryOutcome` |
 | `preview_query(tab_id, request, request_id)` | Same query, run read-only (`SELECT … LIMIT 100` inside a rolled-back transaction) for the live preview panel → return `QueryPreview` |

@@ -37,9 +37,41 @@ export interface CsvTab {
   /// docs/SEARCH_ARCHITECTURE.md §9), so history does not survive closing
   /// the tab.
   queryHistory: { where: string[]; sql: string[] };
+  /// Set when a per-tab IPC call fails in a way that indicates the tab's
+  /// DuckDB session is unusable (docs/IMPLEMENTATION.md §4.5). Drives the ⚠
+  /// icon on the tab. Deliberately NOT queryStatus: that one is scoped to
+  /// apply/preview and is auto-cleared by QUERY_DRAFT_SET and friends.
+  connectionError: string | null;
+  /// Non-null once the user has manually chosen an encoding for this tab;
+  /// keeps the encoding notice reachable so a wrong manual pick is
+  /// recoverable, and changes its wording to reflect the override.
+  encodingOverride: string | null;
+  dismissedNotices: { encoding: boolean; largeRows: boolean };
 }
 
 export const MAX_QUERY_HISTORY = 50;
+
+/// docs/IMPLEMENTATION.md §4.5's "1,000,000 行超" warning threshold.
+/// Numerically equal to the backend's sql::MAX_RESULT_ROWS but unrelated to
+/// it — that one caps query-result materialization; this one is a UX notice
+/// shown for the source file itself.
+export const LARGE_FILE_ROW_THRESHOLD = 1_000_000;
+
+/// `label` is the WHATWG label passed to Rust (`encoding_rs::Encoding::for_label`);
+/// `name` is what encoding_rs reports back in `FileMetadata.encoding`, so the
+/// currently-loaded encoding can be matched without a reverse lookup.
+export const ENCODING_OPTIONS = [
+  { label: "utf-8", name: "UTF-8", display: "UTF-8" },
+  { label: "shift_jis", name: "Shift_JIS", display: "Shift_JIS (CP932)" },
+  { label: "euc-jp", name: "EUC-JP", display: "EUC-JP" },
+  { label: "iso-2022-jp", name: "ISO-2022-JP", display: "ISO-2022-JP" },
+  { label: "utf-16le", name: "UTF-16LE", display: "UTF-16 LE" },
+  { label: "utf-16be", name: "UTF-16BE", display: "UTF-16 BE" },
+  { label: "windows-1252", name: "windows-1252", display: "Windows-1252 (Latin-1)" },
+  { label: "gbk", name: "GBK", display: "GBK (Simplified Chinese)" },
+  { label: "big5", name: "Big5", display: "Big5 (Traditional Chinese)" },
+  { label: "euc-kr", name: "EUC-KR", display: "EUC-KR (Korean)" },
+] as const;
 
 export interface QueryStatus {
   state: "idle" | "running" | "error";
@@ -86,6 +118,10 @@ export interface FileMetadata {
   totalRows: number;
   totalColumns: number;
   encoding: string;
+  /// False when encoding detection was uncertain (or fell back to UTF-8
+  /// without real evidence); drives the manual-encoding notice. Always true
+  /// when the encoding was explicitly chosen by the user.
+  encodingConfident: boolean;
   delimiter: string;
   headers: string[];
 }
@@ -148,4 +184,8 @@ export type AppAction =
   | { type: "QUERY_STATUS_CLEAR"; payload: { tabId: string } }
   | { type: "HISTORY_PUSH"; payload: { tabId: string; mode: "where" | "sql"; entry: string } }
   | { type: "SET_ERROR"; payload: string }
-  | { type: "CLEAR_ERROR" };
+  | { type: "CLEAR_ERROR" }
+  | { type: "TAB_ERROR_SET"; payload: { tabId: string; message: string } }
+  | { type: "TAB_ERROR_CLEAR"; payload: { tabId: string } }
+  | { type: "TAB_RELOAD_START"; payload: { tabId: string; encoding: string | null } }
+  | { type: "NOTICE_DISMISS"; payload: { tabId: string; notice: "encoding" | "largeRows" } };

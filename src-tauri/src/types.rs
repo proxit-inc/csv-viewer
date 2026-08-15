@@ -9,6 +9,11 @@ pub struct FileMetadata {
     pub total_rows: usize,
     pub total_columns: usize,
     pub encoding: String,
+    /// False when encoding detection was uncertain (or fell back to UTF-8
+    /// without real evidence); drives the manual-encoding-selector notice
+    /// (docs/IMPLEMENTATION.md §4.5). Always true when the encoding was
+    /// explicitly chosen by the user via `open_csv_file`'s `encoding` param.
+    pub encoding_confident: bool,
     pub delimiter: String,
     pub headers: Vec<String>,
 }
@@ -115,6 +120,42 @@ impl From<CsvError> for String {
     }
 }
 
+/// The one error shape that crosses IPC with a machine-readable
+/// discriminant. Scoped deliberately to `get_csv_data_range`: it's the only
+/// command whose failure must be distinguishable by the frontend (a dead
+/// session drives the tab's ⚠ icon, an ordinary tab-close race must not).
+/// Every other command still returns a bare `String`, because their
+/// frontend handlers render `err.message` directly and an object there
+/// would surface as "[object Object]".
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CommandError {
+    pub code: ErrorCode,
+    pub message: String,
+}
+
+#[derive(Debug, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ErrorCode {
+    TabNotFound,
+    Connection,
+    Internal,
+}
+
+impl From<CsvError> for CommandError {
+    fn from(err: CsvError) -> Self {
+        let code = match err {
+            CsvError::TabNotFound(_) => ErrorCode::TabNotFound,
+            CsvError::DuckDbError(_) | CsvError::QueryTimeout(_) => ErrorCode::Connection,
+            _ => ErrorCode::Internal,
+        };
+        CommandError {
+            message: err.to_string(),
+            code,
+        }
+    }
+}
+
 impl From<duckdb::Error> for CsvError {
     fn from(e: duckdb::Error) -> Self {
         CsvError::DuckDbError(strip_location_trailer(&e.to_string()))
@@ -203,6 +244,41 @@ mod tests {
         assert_eq!(
             strip_location_trailer("Tab not found: abc"),
             "Tab not found: abc"
+        );
+    }
+
+    #[test]
+    fn command_error_maps_tab_not_found_to_its_own_code() {
+        let err = CommandError::from(CsvError::TabNotFound("abc".into()));
+        assert_eq!(err.code, ErrorCode::TabNotFound);
+        assert_eq!(err.message, "Tab not found: abc");
+    }
+
+    #[test]
+    fn command_error_maps_a_duckdb_error_to_connection() {
+        let err = CommandError::from(CsvError::DuckDbError("boom".into()));
+        assert_eq!(err.code, ErrorCode::Connection);
+    }
+
+    #[test]
+    fn command_error_maps_a_query_timeout_to_connection() {
+        let err = CommandError::from(CsvError::QueryTimeout(10_000));
+        assert_eq!(err.code, ErrorCode::Connection);
+    }
+
+    #[test]
+    fn command_error_maps_other_errors_to_internal() {
+        let err = CommandError::from(CsvError::EncodingError);
+        assert_eq!(err.code, ErrorCode::Internal);
+    }
+
+    #[test]
+    fn command_error_serializes_to_the_wire_shape_the_frontend_string_matches() {
+        let err = CommandError::from(CsvError::TabNotFound("abc".into()));
+        let json = serde_json::to_string(&err).unwrap();
+        assert_eq!(
+            json,
+            r#"{"code":"tabNotFound","message":"Tab not found: abc"}"#
         );
     }
 }

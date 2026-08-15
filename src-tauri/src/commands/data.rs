@@ -5,7 +5,7 @@ use crate::commands::view::{BASE_TABLE, ROW_ID};
 use crate::{
     commands::view,
     state::{DuckDBState, TabSession},
-    types::{CsvError, DataRange},
+    types::{CommandError, CsvError, DataRange},
 };
 
 const MAX_ROWS_PER_FETCH: usize = 500;
@@ -17,7 +17,7 @@ pub fn get_csv_data_range(
     end_row: usize,
     generation: u64,
     state: tauri::State<'_, DuckDBState>,
-) -> Result<DataRange, String> {
+) -> Result<DataRange, CommandError> {
     let session = state.session(&tab_id)?;
     // Silent-discard design (docs/SEARCH_ARCHITECTURE.md §2-3): a stale
     // `generation` in the request is not an error — the response always
@@ -28,7 +28,7 @@ pub fn get_csv_data_range(
     // just an ordinary race between scrolling and applying a query.
     let _ = generation;
 
-    get_range_for_session(&session, start_row, end_row).map_err(String::from)
+    get_range_for_session(&session, start_row, end_row).map_err(CommandError::from)
 }
 
 /// The command body, taking a `TabSession` directly so tests can exercise it
@@ -178,7 +178,7 @@ mod tests {
     #[test]
     fn search_hit_row_is_the_same_row_get_data_range_returns() {
         let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../test-data/small.csv");
-        let (conn, _metadata) = load_csv(path).expect("small.csv should load");
+        let (conn, _metadata) = load_csv(path, None).expect("small.csv should load");
 
         let response = search(&conn, "Sapporo").expect("search should not error");
         assert!(
@@ -204,7 +204,7 @@ mod tests {
     #[test]
     fn fetches_the_requested_row_range_in_order() {
         let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../test-data/small.csv");
-        let (conn, metadata) = load_csv(path).expect("small.csv should load");
+        let (conn, metadata) = load_csv(path, None).expect("small.csv should load");
 
         let range = get_data_range(&conn, 0, 5).expect("range fetch should not error");
 
@@ -222,7 +222,7 @@ mod tests {
             env!("CARGO_MANIFEST_DIR"),
             "/../test-data/tab_delimited.tsv"
         );
-        let (conn, _metadata) = load_csv(path).expect("tab_delimited.tsv should load");
+        let (conn, _metadata) = load_csv(path, None).expect("tab_delimited.tsv should load");
 
         let range = get_data_range(&conn, 0, 10_000).expect("range fetch should not error");
 
@@ -233,7 +233,7 @@ mod tests {
     #[test]
     fn returns_fewer_rows_near_the_end_of_the_table() {
         let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../test-data/small.csv");
-        let (conn, _metadata) = load_csv(path).expect("small.csv should load");
+        let (conn, _metadata) = load_csv(path, None).expect("small.csv should load");
 
         // Only 5 rows remain (indices 95..99) though the requested window asks for 10.
         let range = get_data_range(&conn, 95, 105).expect("range fetch should not error");
@@ -245,7 +245,7 @@ mod tests {
     #[test]
     fn row_ids_are_populated_from_the_source_row_id_column() {
         let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../test-data/small.csv");
-        let (conn, _metadata) = load_csv(path).expect("small.csv should load");
+        let (conn, _metadata) = load_csv(path, None).expect("small.csv should load");
 
         let range = get_data_range(&conn, 0, 5).expect("range fetch should not error");
         assert_eq!(range.row_ids, Some(vec![0, 1, 2, 3, 4]));
@@ -254,7 +254,7 @@ mod tests {
     #[test]
     fn generation_is_echoed_back_on_the_range() {
         let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../test-data/small.csv");
-        let (conn, _metadata) = load_csv(path).expect("small.csv should load");
+        let (conn, _metadata) = load_csv(path, None).expect("small.csv should load");
 
         let range = get_data_range_in(&conn, BASE_TABLE, Some(ROW_ID), 100, 7, 0, 5)
             .expect("range fetch should not error");

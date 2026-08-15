@@ -5,6 +5,7 @@ use std::sync::{Arc, Mutex};
 use duckdb::Connection;
 
 use crate::commands::view::{BASE_TABLE, ROW_ID};
+use crate::types::CsvError;
 
 pub struct DuckDBState {
     pub tabs: Mutex<HashMap<String, Arc<TabSession>>>,
@@ -21,13 +22,13 @@ impl DuckDBState {
     /// before returning — every command needs this same lock-get-clone-drop
     /// sequence so it can hold the tab's own connection lock afterward
     /// without also holding the (unrelated) tabs-map lock.
-    pub fn session(&self, tab_id: &str) -> Result<Arc<TabSession>, String> {
+    pub fn session(&self, tab_id: &str) -> Result<Arc<TabSession>, CsvError> {
         self.tabs
             .lock()
             .unwrap()
             .get(tab_id)
             .cloned()
-            .ok_or_else(|| format!("Tab not found: {}", tab_id))
+            .ok_or_else(|| CsvError::TabNotFound(tab_id.to_string()))
     }
 }
 
@@ -97,6 +98,21 @@ impl TabSession {
                 self.generation(),
                 Some(ROW_ID.to_string()),
             ),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn session_returns_tab_not_found_for_an_unknown_tab() {
+        let state = DuckDBState::new();
+        let result = state.session("does-not-exist");
+        match result {
+            Err(CsvError::TabNotFound(id)) => assert_eq!(id, "does-not-exist"),
+            _ => panic!("expected CsvError::TabNotFound"),
         }
     }
 }
