@@ -3,9 +3,10 @@ import type { CsvTab } from "../types";
 interface StatusBarProps {
   activeTab: CsvTab | null;
   tabCount: number;
+  appVersion: string;
 }
 
-export function StatusBar({ activeTab, tabCount }: StatusBarProps) {
+export function StatusBar({ activeTab, tabCount, appVersion }: StatusBarProps) {
   const status = activeTab?.isLoading ? "Loading..." : activeTab?.metadata ? "Ready" : "No file";
 
   const rowInfo = activeTab?.metadata
@@ -26,7 +27,10 @@ export function StatusBar({ activeTab, tabCount }: StatusBarProps) {
         <span>{status}</span>
         {rowInfo && <span>{rowInfo}</span>}
       </div>
-      <span>{tabCount > 0 ? `${tabCount} tab${tabCount > 1 ? "s" : ""}` : ""}</span>
+      <div className="flex items-center gap-3">
+        <span>{tabCount > 0 ? `${tabCount} tab${tabCount > 1 ? "s" : ""}` : ""}</span>
+        {appVersion && <span>v{appVersion}</span>}
+      </div>
     </div>
   );
 }

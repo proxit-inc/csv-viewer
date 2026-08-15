@@ -30,6 +30,15 @@ jobs:
           node-version: '24'
           cache: 'pnpm'
 
+      - name: Verify tag matches tauri.conf.json version
+        run: |
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          CONF_VERSION=$(node -p "require('./src-tauri/tauri.conf.json').version")
+          if [ "$TAG_VERSION" != "$CONF_VERSION" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match tauri.conf.json version ($CONF_VERSION). Bump the version in package.json, src-tauri/Cargo.toml, and src-tauri/tauri.conf.json before tagging."
+            exit 1
+          fi
+
       - name: Install frontend dependencies
         run: pnpm install --frozen-lockfile
 
@@ -53,4 +62,5 @@ jobs:
           releaseName: 'CSV Viewer ${{ github.ref_name }}'
           releaseDraft: false
           prerelease: false
+          generateReleaseNotes: true
           args: --target universal-apple-darwin

@@ -1,5 +1,6 @@
-import { useReducer, useEffect, useCallback, useRef } from "react";
+import { useReducer, useEffect, useCallback, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { getVersion } from "@tauri-apps/api/app";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { v4 as uuid } from "uuid";
@@ -26,6 +27,7 @@ export default function App() {
   const [state, dispatch] = useReducer(appReducer, initialState);
   const { openFile } = useFileOpen(dispatch);
   const { applyQuery, clearQuery } = useQuery(dispatch);
+  const [appVersion, setAppVersion] = useState("");
 
   const activeTab = state.tabs.find((t) => t.id === state.activeTabId) ?? null;
 
@@ -118,6 +120,10 @@ export default function App() {
     const title = activeTab?.filename ? `${activeTab.filename} — CSV Viewer` : "CSV Viewer";
     getCurrentWindow().setTitle(title).catch(console.error);
   }, [activeTab?.filename]);
+
+  useEffect(() => {
+    getVersion().then(setAppVersion).catch(console.error);
+  }, []); // app version never changes at runtime
 
   useKeyboardShortcuts({
     onOpen: () => openFile(uuid()),
@@ -259,7 +265,7 @@ export default function App() {
 
       <ErrorBoundary>{renderContent()}</ErrorBoundary>
 
-      <StatusBar activeTab={activeTab} tabCount={state.tabs.length} />
+      <StatusBar activeTab={activeTab} tabCount={state.tabs.length} appVersion={appVersion} />
     </div>
   );
 }
