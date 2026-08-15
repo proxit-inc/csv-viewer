@@ -1,6 +1,6 @@
 # CSV Viewer
 
-[![Version](https://img.shields.io/badge/version-0.1.0-orange)](https://github.com/proxit-inc/csv-viewer/releases)
+[![Version](https://img.shields.io/badge/version-0.2.0-orange)](https://github.com/proxit-inc/csv-viewer/releases)
 [![Platform](https://img.shields.io/badge/platform-macOS%2011%2B-lightgrey)](https://github.com/proxit-inc/csv-viewer/releases)
 [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
