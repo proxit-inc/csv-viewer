@@ -34,7 +34,13 @@ cargo clippy        # Rust linter
 cargo test                   # Rust unit tests (encoding, delimiter detection, IPC commands, queries)
 pnpm test                    # frontend unit tests (vitest: appReducer, hooks)
 python generate_test_data.py # generate test-data/ CSV fixtures (100k rows UTF-8, Shift_JIS, TSV)
+cargo test -- --ignored      # opt-in timing checks: the 100k-row load budget + search micro-benches
 ```
+
+Timing-sensitive tests are `#[ignore]`d so a noisy CI runner can't flake the
+default suite; run them explicitly (before a release, or when touching the load
+path). `loads_100k_rows_within_the_performance_budget` in `commands/file.rs`
+asserts the "File load (100k rows) < 3 s" target below.
 
 ## Architecture
 
