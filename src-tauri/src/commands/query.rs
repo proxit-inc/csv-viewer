@@ -511,7 +511,7 @@ mod tests {
     use crate::commands::{data::get_range_for_session, file::load_csv};
 
     fn session_for(path: &str) -> TabSession {
-        let (conn, metadata) = load_csv(path).expect("fixture should load");
+        let (conn, metadata) = load_csv(path, None).expect("fixture should load");
         TabSession::new(conn, metadata.total_rows, metadata.headers)
     }
 

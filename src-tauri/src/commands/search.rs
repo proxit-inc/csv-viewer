@@ -188,7 +188,7 @@ mod tests {
     fn finds_hits_in_the_correct_column_across_a_real_file() {
         let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../test-data/small.csv");
         let (conn, metadata) =
-            crate::commands::file::load_csv(path).expect("small.csv should load");
+            crate::commands::file::load_csv(path, None).expect("small.csv should load");
         let city_col = metadata
             .headers
             .iter()

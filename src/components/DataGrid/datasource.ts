@@ -2,7 +2,16 @@ import { invoke } from "@tauri-apps/api/core";
 import type { IDatasource, IGetRowsParams } from "ag-grid-community";
 import type { DataRange } from "../../types";
 
-export function createDatasource(tabId: string, generation: number): IDatasource {
+interface CommandErrorLike {
+  code?: string;
+  message?: string;
+}
+
+export function createDatasource(
+  tabId: string,
+  generation: number,
+  onFetchStatus: (error: string | null) => void,
+): IDatasource {
   let latestReqId = 0;
 
   return {
@@ -28,6 +37,8 @@ export function createDatasource(tabId: string, generation: number): IDatasource
         // own key.
         if (result.generation !== generation) return;
 
+        onFetchStatus(null);
+
         const rowData = result.rows.map((row, idx) => ({
           __rowNum: String((result.rowIds?.[idx] ?? params.startRow + idx) + 1),
           ...row.reduce<Record<string, string>>((acc, cell, ci) => {
@@ -39,6 +50,13 @@ export function createDatasource(tabId: string, generation: number): IDatasource
         params.successCallback(rowData, result.totalRows);
       } catch (err) {
         console.error("Datasource error:", err);
+        const { code, message } = (err as CommandErrorLike) ?? {};
+        // "tabNotFound" is the ordinary close/switch race — the tab is
+        // already gone, so flagging a connection error on it is both
+        // meaningless and impossible to see.
+        if (code !== "tabNotFound") {
+          onFetchStatus(message ?? (err instanceof Error ? err.message : String(err)));
+        }
         params.failCallback();
       }
     },

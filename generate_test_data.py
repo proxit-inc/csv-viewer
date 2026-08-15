@@ -2,6 +2,7 @@ import csv
 import os
 import random
 import string
+import sys
 
 
 def gen(filename, rows, encoding="utf-8", delimiter=",", cities=None):
@@ -37,3 +38,9 @@ if __name__ == "__main__":
     )
     gen("test-data/tab_delimited.tsv", 10_000, delimiter="\t")
     gen("test-data/small.csv", 100)
+
+    # Manual/e2e fixture for the >1,000,000-row warning notice
+    # (docs/IMPLEMENTATION.md §4.5). Opt-in only: ~45MB, and
+    # test-data/large_*.csv is gitignored rather than committed.
+    if "--large" in sys.argv:
+        gen("test-data/large_1_2m.csv", 1_200_000)
