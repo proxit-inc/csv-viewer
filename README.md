@@ -8,6 +8,8 @@ A fast, local CSV file viewer for macOS. View large files (100k+ rows) across mu
 
 Built with **Tauri 2** + **React 18** + **TypeScript** + **DuckDB**.
 
+![CSV Viewer showing a 100,000-row CSV file with full-text search highlighting](docs/assets/screenshot.png)
+
 ---
 
 ## Features
