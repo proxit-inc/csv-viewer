@@ -62,4 +62,5 @@ jobs:
           releaseName: 'CSV Viewer ${{ github.ref_name }}'
           releaseDraft: false
           prerelease: false
+          generateReleaseNotes: true
           args: --target universal-apple-darwin
