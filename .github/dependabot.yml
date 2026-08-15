@@ -4,31 +4,45 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
-    # Bundle all npm updates into a single PR to cut CI runs and review noise.
+    # Bundle npm minor/patch updates into a single PR to cut CI runs and review
+    # noise. Majors match no group and so land as individual PRs, keeping
+    # breaking bumps reviewable on their own instead of blocking the batch.
     groups:
       npm-dependencies:
         patterns:
           - "*"
+        update-types:
+          - "minor"
+          - "patch"
 
   - package-ecosystem: "cargo"
     directory: "/src-tauri"
     schedule:
       interval: "weekly"
-    # Bundle Cargo updates into a single PR. Each Cargo.lock change invalidates
-    # the Rust build cache and forces a full (~9 min) rebuild of the bundled
-    # DuckDB C++ sources, so collapsing many small bumps into one PR minimizes
-    # how often that cold rebuild is paid.
+    # Bundle Cargo minor/patch updates into a single PR. Each Cargo.lock change
+    # invalidates the Rust build cache and forces a full (~9 min) rebuild of the
+    # bundled DuckDB C++ sources, so collapsing many small bumps into one PR
+    # minimizes how often that cold rebuild is paid. Majors are deliberately
+    # left ungrouped and get their own PR: reviewing breaking bumps in isolation
+    # is worth paying that rebuild once more per major.
     groups:
       cargo-dependencies:
         patterns:
           - "*"
+        update-types:
+          - "minor"
+          - "patch"
 
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
       interval: "weekly"
-    # Bundle all GitHub Actions updates into a single PR.
+    # Bundle GitHub Actions minor/patch updates into a single PR. Action major
+    # bumps (e.g. v4 -> v5) stay ungrouped and get their own PR.
     groups:
       github-actions:
         patterns:
           - "*"
+        update-types:
+          - "minor"
+          - "patch"
