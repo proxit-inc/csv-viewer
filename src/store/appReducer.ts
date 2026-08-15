@@ -46,8 +46,8 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       const { tabId, metadata } = action.payload;
       return {
         ...state,
-        tabs: state.tabs.map(
-          (t): CsvTab => (t.id === tabId ? { ...t, metadata, isLoading: false } : t),
+        tabs: state.tabs.map((t): CsvTab =>
+          t.id === tabId ? { ...t, metadata, isLoading: false } : t,
         ),
       };
     }
@@ -80,17 +80,16 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       const { tabId, query, hits, truncated } = action.payload;
       return {
         ...state,
-        tabs: state.tabs.map(
-          (t): CsvTab =>
-            t.id === tabId
-              ? {
-                  ...t,
-                  searchQuery: query,
-                  searchHits: hits,
-                  searchHitIndex: 0,
-                  searchTruncated: truncated,
-                }
-              : t,
+        tabs: state.tabs.map((t): CsvTab =>
+          t.id === tabId
+            ? {
+                ...t,
+                searchQuery: query,
+                searchHits: hits,
+                searchHitIndex: 0,
+                searchTruncated: truncated,
+              }
+            : t,
         ),
       };
     }
@@ -115,24 +114,23 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       const { tabId, mode, draft } = action.payload;
       return {
         ...state,
-        tabs: state.tabs.map(
-          (t): CsvTab =>
-            t.id === tabId
-              ? {
-                  ...t,
-                  queryDrafts: { ...t.queryDrafts, [mode]: draft },
-                  // Editing the predicate/SQL implicitly dismisses whatever
-                  // error was left over from the last failed apply (queryStatus)
-                  // or preview (preview.error) — otherwise the message has no
-                  // way to clear short of a successful re-apply/re-preview (or
-                  // Reset, which doesn't exist yet on a tab that has never
-                  // successfully applied). A fresh debounced preview fires
-                  // ~200ms after this anyway; clearing here just avoids a
-                  // stale-looking error sitting on screen for that window.
-                  queryStatus: { state: "idle" },
-                  preview: t.preview ? { ...t.preview, error: null } : t.preview,
-                }
-              : t,
+        tabs: state.tabs.map((t): CsvTab =>
+          t.id === tabId
+            ? {
+                ...t,
+                queryDrafts: { ...t.queryDrafts, [mode]: draft },
+                // Editing the predicate/SQL implicitly dismisses whatever
+                // error was left over from the last failed apply (queryStatus)
+                // or preview (preview.error) — otherwise the message has no
+                // way to clear short of a successful re-apply/re-preview (or
+                // Reset, which doesn't exist yet on a tab that has never
+                // successfully applied). A fresh debounced preview fires
+                // ~200ms after this anyway; clearing here just avoids a
+                // stale-looking error sitting on screen for that window.
+                queryStatus: { state: "idle" },
+                preview: t.preview ? { ...t.preview, error: null } : t.preview,
+              }
+            : t,
         ),
       };
     }
@@ -141,8 +139,8 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       const { tabId } = action.payload;
       return {
         ...state,
-        tabs: state.tabs.map(
-          (t): CsvTab => (t.id === tabId ? { ...t, queryStatus: { state: "idle" } } : t),
+        tabs: state.tabs.map((t): CsvTab =>
+          t.id === tabId ? { ...t, queryStatus: { state: "idle" } } : t,
         ),
       };
     }
@@ -159,9 +157,8 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       const { tabId, message } = action.payload;
       return {
         ...state,
-        tabs: state.tabs.map(
-          (t): CsvTab =>
-            t.id === tabId && t.preview ? { ...t, preview: { ...t.preview, error: message } } : t,
+        tabs: state.tabs.map((t): CsvTab =>
+          t.id === tabId && t.preview ? { ...t, preview: { ...t.preview, error: message } } : t,
         ),
       };
     }
@@ -170,8 +167,8 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       const { tabId } = action.payload;
       return {
         ...state,
-        tabs: state.tabs.map(
-          (t): CsvTab => (t.id === tabId ? { ...t, queryStatus: { state: "running" } } : t),
+        tabs: state.tabs.map((t): CsvTab =>
+          t.id === tabId ? { ...t, queryStatus: { state: "running" } } : t,
         ),
       };
     }
@@ -180,23 +177,22 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       const { tabId, outcome } = action.payload;
       return {
         ...state,
-        tabs: state.tabs.map(
-          (t): CsvTab =>
-            t.id === tabId
-              ? {
-                  ...t,
-                  generation: outcome.generation,
-                  resultView: outcome,
-                  queryStatus: { state: "idle" },
-                  // Hits are cell coordinates into whatever view was active
-                  // when the search ran — they no longer line up once the
-                  // view changes underneath them.
-                  searchHits: [],
-                  searchQuery: "",
-                  searchHitIndex: 0,
-                  searchTruncated: false,
-                }
-              : t,
+        tabs: state.tabs.map((t): CsvTab =>
+          t.id === tabId
+            ? {
+                ...t,
+                generation: outcome.generation,
+                resultView: outcome,
+                queryStatus: { state: "idle" },
+                // Hits are cell coordinates into whatever view was active
+                // when the search ran — they no longer line up once the
+                // view changes underneath them.
+                searchHits: [],
+                searchQuery: "",
+                searchHitIndex: 0,
+                searchTruncated: false,
+              }
+            : t,
         ),
       };
     }
@@ -208,9 +204,8 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       // reserved for IPC-level failures like a vanished tab.
       return {
         ...state,
-        tabs: state.tabs.map(
-          (t): CsvTab =>
-            t.id === tabId ? { ...t, queryStatus: { state: "error", message, position } } : t,
+        tabs: state.tabs.map((t): CsvTab =>
+          t.id === tabId ? { ...t, queryStatus: { state: "error", message, position } } : t,
         ),
       };
     }
@@ -219,22 +214,21 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       const { tabId, outcome } = action.payload;
       return {
         ...state,
-        tabs: state.tabs.map(
-          (t): CsvTab =>
-            t.id === tabId
-              ? {
-                  ...t,
-                  generation: outcome.generation,
-                  resultView: null,
-                  queryStatus: { state: "idle" },
-                  preview: null,
-                  searchHits: [],
-                  searchQuery: "",
-                  searchHitIndex: 0,
-                  searchTruncated: false,
-                  sort: [],
-                }
-              : t,
+        tabs: state.tabs.map((t): CsvTab =>
+          t.id === tabId
+            ? {
+                ...t,
+                generation: outcome.generation,
+                resultView: null,
+                queryStatus: { state: "idle" },
+                preview: null,
+                searchHits: [],
+                searchQuery: "",
+                searchHitIndex: 0,
+                searchTruncated: false,
+                sort: [],
+              }
+            : t,
         ),
       };
     }
@@ -274,8 +268,8 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       const { tabId, message } = action.payload;
       return {
         ...state,
-        tabs: state.tabs.map(
-          (t): CsvTab => (t.id === tabId ? { ...t, connectionError: message } : t),
+        tabs: state.tabs.map((t): CsvTab =>
+          t.id === tabId ? { ...t, connectionError: message } : t,
         ),
       };
     }
@@ -301,28 +295,27 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       // response from the new session and the grid stays permanently blank.
       return {
         ...state,
-        tabs: state.tabs.map(
-          (t): CsvTab =>
-            t.id === tabId
-              ? {
-                  ...t,
-                  isLoading: true,
-                  metadata: null,
-                  generation: 0,
-                  resultView: null,
-                  preview: null,
-                  queryStatus: { state: "idle" },
-                  searchHits: [],
-                  searchQuery: "",
-                  searchHitIndex: 0,
-                  searchTruncated: false,
-                  sort: [],
-                  scrollOffset: 0,
-                  connectionError: null,
-                  encodingOverride: encoding,
-                  dismissedNotices: { encoding: false, largeRows: false },
-                }
-              : t,
+        tabs: state.tabs.map((t): CsvTab =>
+          t.id === tabId
+            ? {
+                ...t,
+                isLoading: true,
+                metadata: null,
+                generation: 0,
+                resultView: null,
+                preview: null,
+                queryStatus: { state: "idle" },
+                searchHits: [],
+                searchQuery: "",
+                searchHitIndex: 0,
+                searchTruncated: false,
+                sort: [],
+                scrollOffset: 0,
+                connectionError: null,
+                encodingOverride: encoding,
+                dismissedNotices: { encoding: false, largeRows: false },
+              }
+            : t,
         ),
       };
     }
@@ -331,11 +324,10 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       const { tabId, notice } = action.payload;
       return {
         ...state,
-        tabs: state.tabs.map(
-          (t): CsvTab =>
-            t.id === tabId
-              ? { ...t, dismissedNotices: { ...t.dismissedNotices, [notice]: true } }
-              : t,
+        tabs: state.tabs.map((t): CsvTab =>
+          t.id === tabId
+            ? { ...t, dismissedNotices: { ...t.dismissedNotices, [notice]: true } }
+            : t,
         ),
       };
     }
