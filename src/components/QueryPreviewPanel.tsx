@@ -1,6 +1,5 @@
-import { useState } from "react";
-import { Copy, Check } from "lucide-react";
 import type { PreviewState } from "../types";
+import { CopyButton } from "./CopyButton";
 
 interface QueryPreviewPanelProps {
   preview: PreviewState | null;
@@ -15,20 +14,7 @@ export function rowsToTsv(columns: string[], rows: string[][]): string {
 // scroll position/block cache is tab-persisted state, and rewriting it
 // mid-typing would fight that (see docs/SEARCH_ARCHITECTURE.md §3-3).
 export function QueryPreviewPanel({ preview }: QueryPreviewPanelProps) {
-  const [copied, setCopied] = useState(false);
-
   if (!preview) return null;
-
-  const handleCopy = () => {
-    // Copies only the fetched preview page (≤100 rows), not the full
-    // current view — the view can be up to 1M rows, and this button exists
-    // for a quick "grab what I'm looking at" action, not a bulk export
-    // (read-only viewer principle: no full-dataset export path).
-    navigator.clipboard.writeText(rowsToTsv(preview.columns, preview.rows)).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
-    });
-  };
 
   return (
     <div
@@ -40,8 +26,12 @@ export function QueryPreviewPanel({ preview }: QueryPreviewPanelProps) {
       }}
     >
       {preview.error && (
-        <div className="px-3 py-1" style={{ color: "#DC2626", background: "#FEF2F2" }}>
-          {preview.error}
+        <div
+          className="flex items-start justify-between gap-2 px-3 py-1"
+          style={{ color: "#DC2626", background: "#FEF2F2" }}
+        >
+          <span className="flex-1">{preview.error}</span>
+          <CopyButton text={preview.error} label="Copy error" />
         </div>
       )}
       {preview.busy ? (
@@ -59,14 +49,12 @@ export function QueryPreviewPanel({ preview }: QueryPreviewPanelProps) {
             style={{ background: "var(--col-surface)", color: "var(--col-text3)" }}
           >
             <span>{preview.rows.length} rows (preview)</span>
-            <button
-              onClick={handleCopy}
-              className="flex items-center gap-1 px-1.5 py-0.5 rounded hover:bg-black/10"
-              title="Copy as TSV"
-            >
-              {copied ? <Check size={11} /> : <Copy size={11} />}
-              {copied ? "Copied" : "Copy"}
-            </button>
+            {/* Copies only the fetched preview page (≤100 rows), not the
+                full current view — the view can be up to 1M rows, and this
+                button exists for a quick "grab what I'm looking at" action,
+                not a bulk export (read-only viewer principle: no
+                full-dataset export path). */}
+            <CopyButton text={rowsToTsv(preview.columns, preview.rows)} label="Copy as TSV" />
           </div>
           <table className="w-full border-collapse">
             <thead>

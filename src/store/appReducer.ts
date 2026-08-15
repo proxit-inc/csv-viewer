@@ -117,7 +117,32 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         ...state,
         tabs: state.tabs.map(
           (t): CsvTab =>
-            t.id === tabId ? { ...t, queryDrafts: { ...t.queryDrafts, [mode]: draft } } : t,
+            t.id === tabId
+              ? {
+                  ...t,
+                  queryDrafts: { ...t.queryDrafts, [mode]: draft },
+                  // Editing the predicate/SQL implicitly dismisses whatever
+                  // error was left over from the last failed apply (queryStatus)
+                  // or preview (preview.error) — otherwise the message has no
+                  // way to clear short of a successful re-apply/re-preview (or
+                  // Reset, which doesn't exist yet on a tab that has never
+                  // successfully applied). A fresh debounced preview fires
+                  // ~200ms after this anyway; clearing here just avoids a
+                  // stale-looking error sitting on screen for that window.
+                  queryStatus: { state: "idle" },
+                  preview: t.preview ? { ...t.preview, error: null } : t.preview,
+                }
+              : t,
+        ),
+      };
+    }
+
+    case "QUERY_STATUS_CLEAR": {
+      const { tabId } = action.payload;
+      return {
+        ...state,
+        tabs: state.tabs.map(
+          (t): CsvTab => (t.id === tabId ? { ...t, queryStatus: { state: "idle" } } : t),
         ),
       };
     }

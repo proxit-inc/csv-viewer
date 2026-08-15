@@ -179,7 +179,7 @@ export default function App() {
         />
       )}
 
-      {activeTab?.metadata && activeTab.resultView && (
+      {activeTab?.metadata && (
         <ResultBar
           metadata={activeTab.metadata}
           resultView={activeTab.resultView}

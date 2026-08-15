@@ -145,6 +145,7 @@ export type AppAction =
   | { type: "QUERY_RUN_ERROR"; payload: { tabId: string; message: string; position?: number } }
   | { type: "QUERY_CLEAR"; payload: { tabId: string; outcome: QueryOutcome } }
   | { type: "SORT_SET"; payload: { tabId: string; sort: SortSpec[] } }
+  | { type: "QUERY_STATUS_CLEAR"; payload: { tabId: string } }
   | { type: "HISTORY_PUSH"; payload: { tabId: string; mode: "where" | "sql"; entry: string } }
   | { type: "SET_ERROR"; payload: string }
   | { type: "CLEAR_ERROR" };

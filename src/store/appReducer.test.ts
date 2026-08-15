@@ -342,6 +342,78 @@ describe("appReducer", () => {
     expect(state.tabs.find((t) => t.id === "b")!.isSearchOpen).toBe(false);
   });
 
+  it("QUERY_DRAFT_SET clears a leftover error status for the matching tab only", () => {
+    const tabs = [
+      makeTab("a", { queryStatus: { state: "error", message: "boom" } }),
+      makeTab("b", { queryStatus: { state: "error", message: "boom" } }),
+    ];
+    const state = appReducer(stateWithTabs(tabs, "a"), {
+      type: "QUERY_DRAFT_SET",
+      payload: { tabId: "a", mode: "where", draft: "city = 'Tokyo'" },
+    });
+
+    expect(state.tabs.find((t) => t.id === "a")!.queryStatus).toEqual({ state: "idle" });
+    expect(state.tabs.find((t) => t.id === "b")!.queryStatus).toEqual({
+      state: "error",
+      message: "boom",
+    });
+  });
+
+  it("QUERY_DRAFT_SET also clears a leftover preview error, leaving its rows intact", () => {
+    const tabs = [
+      makeTab("a", {
+        preview: {
+          requestId: 1,
+          columns: ["city"],
+          rows: [["Tokyo"]],
+          elapsedMs: 2,
+          busy: false,
+          error: "Parser Error: unterminated quoted string",
+        },
+      }),
+    ];
+    const state = appReducer(stateWithTabs(tabs, "a"), {
+      type: "QUERY_DRAFT_SET",
+      payload: { tabId: "a", mode: "where", draft: "city = 'Tokyo'" },
+    });
+
+    expect(state.tabs[0].preview).toEqual({
+      requestId: 1,
+      columns: ["city"],
+      rows: [["Tokyo"]],
+      elapsedMs: 2,
+      busy: false,
+      error: null,
+    });
+  });
+
+  it("QUERY_DRAFT_SET is a no-op on preview when the tab has none yet", () => {
+    const tabs = [makeTab("a", { preview: null })];
+    const state = appReducer(stateWithTabs(tabs, "a"), {
+      type: "QUERY_DRAFT_SET",
+      payload: { tabId: "a", mode: "where", draft: "city = 'Tokyo'" },
+    });
+
+    expect(state.tabs[0].preview).toBeNull();
+  });
+
+  it("QUERY_STATUS_CLEAR resets queryStatus to idle for the matching tab only", () => {
+    const tabs = [
+      makeTab("a", { queryStatus: { state: "error", message: "boom" } }),
+      makeTab("b", { queryStatus: { state: "error", message: "boom" } }),
+    ];
+    const state = appReducer(stateWithTabs(tabs, "a"), {
+      type: "QUERY_STATUS_CLEAR",
+      payload: { tabId: "a" },
+    });
+
+    expect(state.tabs.find((t) => t.id === "a")!.queryStatus).toEqual({ state: "idle" });
+    expect(state.tabs.find((t) => t.id === "b")!.queryStatus).toEqual({
+      state: "error",
+      message: "boom",
+    });
+  });
+
   it("SET_ERROR and CLEAR_ERROR manage errorMessage", () => {
     const withError = appReducer(initialState, { type: "SET_ERROR", payload: "boom" });
     expect(withError.errorMessage).toBe("boom");

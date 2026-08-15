@@ -5,6 +5,7 @@ import { useSearch } from "../hooks/useSearch";
 import { useQuery } from "../hooks/useQuery";
 import { useDebounce } from "../hooks/useDebounce";
 import { QueryPreviewPanel } from "./QueryPreviewPanel";
+import { CopyButton } from "./CopyButton";
 
 // Dynamically imported: CodeMirror is only worth its ~60-80KB gz cost once
 // the user actually opens sql mode (docs/SEARCH_ARCHITECTURE.md §3-1).
@@ -21,6 +22,20 @@ const MODES: { mode: QueryMode; label: string }[] = [
   { mode: "where", label: "Where" },
   { mode: "sql", label: "SQL" },
 ];
+
+// macOS/WebKit auto-substitutes straight quotes for their typographic
+// ("smart") counterparts as the user types in a plain <input> (and pasted
+// text from apps like Notes/Pages commonly already uses them). DuckDB only
+// recognizes ASCII ' and " as SQL delimiters — a smart quote doesn't error
+// obviously, it silently changes what the query means (a curly '/' isn't a
+// string delimiter at all, and a curly "/" isn't recognized as the matching
+// close for its own opener either, so it's just as broken). Normalize back
+// to ASCII on every edit so what the user sees is what actually gets sent.
+export function normalizeSmartQuotes(text: string): string {
+  // ‘/’ = left/right single quotation mark, “/” =
+  // left/right double quotation mark.
+  return text.replace(/[‘’]/g, "'").replace(/[“”]/g, '"');
+}
 
 export function SearchBar({ tab, dispatch, onClose }: SearchBarProps) {
   const {
@@ -89,7 +104,7 @@ export function SearchBar({ tab, dispatch, onClose }: SearchBarProps) {
   };
 
   const handleWhereChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value;
+    const value = normalizeSmartQuotes(e.target.value);
     setLocalWhere(value);
     setWhereHistoryIndex(null);
     dispatch({ type: "QUERY_DRAFT_SET", payload: { tabId, mode: "where", draft: value } });
@@ -121,6 +136,13 @@ export function SearchBar({ tab, dispatch, onClose }: SearchBarProps) {
   };
 
   const handleSqlChange = (value: string) => {
+    // Deliberately NOT normalizing smart quotes here the way handleWhereChange
+    // does: SqlEditor pushes external `value` changes back into the live CM
+    // doc via a full-range replace (see SqlEditor.tsx), which would fight
+    // the user's cursor position mid-typing in a way a plain <input>'s
+    // controlled value doesn't. The backend's error-message improvements
+    // still make a smart-quote mistake in sql mode diagnosable even without
+    // this.
     setLocalSql(value);
     dispatch({ type: "QUERY_DRAFT_SET", payload: { tabId, mode: "sql", draft: value } });
     if (value.trim()) debouncedSqlPreview(value);
@@ -158,10 +180,10 @@ export function SearchBar({ tab, dispatch, onClose }: SearchBarProps) {
             <button
               key={m}
               onClick={() => dispatch({ type: "SEARCH_MODE_SET", payload: { tabId, mode: m } })}
-              className="px-2 py-0.5 text-xs rounded"
+              className={`px-2 py-0.5 text-xs rounded ${mode === m ? "" : "hover:bg-black/10"}`}
               style={{
-                background: mode === m ? "var(--col-row-hover)" : "transparent",
-                color: "var(--col-text2)",
+                background: mode === m ? "var(--col-accent)" : "transparent",
+                color: mode === m ? "#fff" : "var(--col-text2)",
               }}
             >
               {label}
@@ -182,6 +204,8 @@ export function SearchBar({ tab, dispatch, onClose }: SearchBarProps) {
               if (e.key === "Escape") onClose();
             }}
             placeholder="Search..."
+            autoCorrect="off"
+            spellCheck={false}
             className="flex-1 bg-transparent outline-none text-sm"
             style={{ color: "var(--col-text)" }}
           />
@@ -195,6 +219,8 @@ export function SearchBar({ tab, dispatch, onClose }: SearchBarProps) {
             <input
               ref={inputRef}
               type="text"
+              autoCorrect="off"
+              spellCheck={false}
               value={localWhere}
               onChange={handleWhereChange}
               onKeyDown={(e) => {
@@ -266,7 +292,10 @@ export function SearchBar({ tab, dispatch, onClose }: SearchBarProps) {
       </div>
 
       {mode === "sql" && (
-        <div className="border-t" style={{ borderColor: "var(--col-border)", height: "80px" }}>
+        <div
+          className="border-t flex flex-col"
+          style={{ borderColor: "var(--col-border)", height: "80px", overflow: "hidden" }}
+        >
           <Suspense
             fallback={
               <div className="px-3 py-2 text-xs" style={{ color: "var(--col-text3)" }}>
@@ -286,8 +315,19 @@ export function SearchBar({ tab, dispatch, onClose }: SearchBarProps) {
       )}
 
       {(mode === "where" || mode === "sql") && queryStatus.state === "error" && (
-        <div className="px-3 pb-1 text-xs" style={{ color: "#DC2626" }}>
-          {queryStatus.message}
+        <div
+          className="flex items-start justify-between gap-2 px-3 pb-1 text-xs"
+          style={{ color: "#DC2626" }}
+        >
+          <span className="flex-1">{queryStatus.message}</span>
+          <CopyButton text={queryStatus.message ?? ""} label="Copy error" />
+          <button
+            onClick={() => dispatch({ type: "QUERY_STATUS_CLEAR", payload: { tabId } })}
+            className="p-0.5 rounded hover:bg-black/10 shrink-0"
+            title="Dismiss"
+          >
+            <X size={12} />
+          </button>
         </div>
       )}
 

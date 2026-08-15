@@ -1,9 +1,9 @@
-use std::ffi::CString;
+use std::ffi::{CStr, CString};
 use std::sync::{Mutex, OnceLock};
 
 use duckdb::ffi;
 
-use crate::types::CsvError;
+use crate::types::{strip_location_trailer, CsvError};
 
 /// A scratch, never-executed connection used only to parse/count statements
 /// via `duckdb_extract_statements`. Owned separately from any tab's
@@ -85,12 +85,20 @@ impl Drop for ExtractedGuard {
     }
 }
 
-/// Number of SQL statements DuckDB's own parser finds in `sql`. Parse
-/// failures (e.g. `SELECT FROM FROM`) return `Ok(0)` rather than surfacing
-/// the parser's own error text here — every caller rejects a non-1 count
-/// either way, and the real syntax error (with a `LINE 1: ... ^` position)
-/// surfaces later from `Connection::prepare()` on the tab's own connection.
-pub(crate) fn statement_count(sql: &str) -> Result<usize, CsvError> {
+/// Result of parsing `sql` with DuckDB's own parser: how many statements it
+/// found, and — only when that count is `0` (a genuine parse failure) —
+/// the parser's own error text, if DuckDB provided one.
+struct ExtractOutcome {
+    count: usize,
+    error_text: Option<String>,
+}
+
+/// Runs `duckdb_extract_statements` against the scratch parser connection
+/// and, on a parse failure (`count == 0`), also captures DuckDB's own
+/// error text via `duckdb_extract_statements_error` before the extracted
+/// handle is destroyed. Both `statement_count` and `assert_single_statement`
+/// go through this so the FFI call and cleanup only happen in one place.
+fn extract_statements(sql: &str) -> Result<ExtractOutcome, CsvError> {
     let query = CString::new(sql).map_err(|_| CsvError::QueryError {
         message: "query contains an embedded NUL byte".into(),
         position: None,
@@ -107,23 +115,73 @@ pub(crate) fn statement_count(sql: &str) -> Result<usize, CsvError> {
     // out-pointer on the stack.
     let count =
         unsafe { ffi::duckdb_extract_statements(guard.conn, query.as_ptr(), &mut extracted) };
-    let _guard = ExtractedGuard(extracted);
+    let extracted_guard = ExtractedGuard(extracted);
 
-    Ok(count as usize)
+    let error_text = if count == 0 {
+        // SAFETY: `extracted_guard.0` is the handle `duckdb_extract_statements`
+        // just populated above (the C API always sets the out-parameter,
+        // even on failure). The returned pointer, if non-null, is owned by
+        // that handle and stays valid only until `duckdb_destroy_extracted`
+        // runs in `ExtractedGuard::drop` — which happens after this
+        // function returns — so it must be copied into an owned `String`
+        // now, before that drop.
+        let ptr = unsafe { ffi::duckdb_extract_statements_error(extracted_guard.0) };
+        if ptr.is_null() {
+            None
+        } else {
+            let raw = unsafe { CStr::from_ptr(ptr) }
+                .to_string_lossy()
+                .into_owned();
+            Some(strip_location_trailer(&raw))
+        }
+    } else {
+        None
+    };
+
+    Ok(ExtractOutcome {
+        count: count as usize,
+        error_text,
+    })
+}
+
+/// Number of SQL statements DuckDB's own parser finds in `sql`. Thin
+/// wrapper over `extract_statements` kept for the test suite, which checks
+/// counts directly; `assert_single_statement` calls `extract_statements`
+/// itself since it also needs the error text on a parse failure.
+#[cfg(test)]
+pub(crate) fn statement_count(sql: &str) -> Result<usize, CsvError> {
+    Ok(extract_statements(sql)?.count)
 }
 
 /// The mandatory first barrier before any user-composed SQL string reaches
 /// `Connection::prepare()`. Rejects anything that doesn't parse as exactly
 /// one statement.
+///
+/// For a parse failure (`count == 0`), DuckDB's own parser error text is
+/// surfaced directly rather than a generic "found 0" message: this
+/// validator's rejection is the *only* place a parse failure is ever
+/// reported to the user. An earlier version of this comment assumed the
+/// real syntax error would surface later from `Connection::prepare()` — but
+/// `wrap_ctas`/`wrap_select` call this function and return `Err` *before*
+/// the string ever reaches `prepare()`, so for `count == 0` there is no
+/// "later"; the count-only message was the only thing the user ever saw.
 pub(crate) fn assert_single_statement(sql: &str) -> Result<(), CsvError> {
-    let count = statement_count(sql)?;
-    if count != 1 {
-        return Err(CsvError::QueryError {
-            message: format!("expected exactly one SQL statement, found {count}"),
+    let outcome = extract_statements(sql)?;
+    match outcome.count {
+        1 => Ok(()),
+        0 => Err(CsvError::QueryError {
+            message: outcome
+                .error_text
+                .unwrap_or_else(|| "could not parse SQL".to_string()),
             position: None,
-        });
+        }),
+        n => Err(CsvError::QueryError {
+            message: format!(
+                "only one SQL statement is allowed (found {n} — check for a stray semicolon)"
+            ),
+            position: None,
+        }),
     }
-    Ok(())
 }
 
 #[cfg(test)]
@@ -183,6 +241,23 @@ mod tests {
     fn parse_failure_is_rejected_not_passed_through() {
         assert_eq!(statement_count("SELECT FROM FROM").unwrap(), 0);
         assert!(assert_single_statement("SELECT FROM FROM").is_err());
+    }
+
+    #[test]
+    fn parse_failure_surfaces_duckdbs_own_error_text() {
+        // An unterminated double-quoted identifier is a genuine parse
+        // failure (unlike a *balanced* `"Sapporo"`, which is valid SQL —
+        // just a reference to an identifier literally named Sapporo).
+        let err =
+            assert_single_statement("SELECT * FROM csv_data WHERE (city = \"Sapporo)").unwrap_err();
+        let CsvError::QueryError { message, .. } = err else {
+            panic!("expected QueryError, got {err:?}");
+        };
+        assert!(!message.is_empty());
+        assert_ne!(
+            message, "expected exactly one SQL statement, found 0",
+            "should surface DuckDB's own parser error, not the old generic count message"
+        );
     }
 
     #[test]

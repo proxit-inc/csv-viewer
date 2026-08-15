@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import { Compartment, EditorState } from "@codemirror/state";
-import { EditorView, keymap } from "@codemirror/view";
+import { EditorView, keymap, placeholder, tooltips } from "@codemirror/view";
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
 import { sql, type SQLNamespace } from "@codemirror/lang-sql";
 import {
@@ -47,6 +47,13 @@ export function SqlEditor({ value, onChange, onApply, onClose, schema }: SqlEdit
         history(),
         closeBrackets(),
         autocompletion(),
+        placeholder("SELECT * FROM csv_data WHERE ..."),
+        // Default tooltip parenting is the editor's own DOM (`view.dom`), so
+        // the completion popup inherits any clipped/constrained-height
+        // ancestor — exactly the small fixed-height box this editor lives
+        // in. Porting to document.body avoids that regardless of the
+        // wrapper's own overflow/height.
+        tooltips({ parent: document.body }),
         syntaxHighlighting(defaultHighlightStyle),
         schemaCompartment.current.of(sql({ schema })),
         keymap.of([

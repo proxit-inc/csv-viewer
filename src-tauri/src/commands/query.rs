@@ -260,6 +260,76 @@ fn description_for(req: &QueryRequest) -> &'static str {
     }
 }
 
+/// Pulls the column name out of DuckDB's `Binder Error: Referenced column
+/// "<name>" not found in FROM clause!` message shape, or `None` if the
+/// message doesn't match that shape (e.g. any other Binder/Catalog error).
+fn column_not_found_name(message: &str) -> Option<&str> {
+    let after = message.strip_prefix("Binder Error: Referenced column \"")?;
+    let (name, rest) = after.split_once('"')?;
+    rest.starts_with(" not found in FROM clause!")
+        .then_some(name)
+}
+
+/// Replaces a "column not found" error with a plain-language explanation
+/// when it looks like the classic double-quotes-instead-of-single-quotes
+/// mistake: in SQL, double quotes name an *identifier* (a column), not a
+/// text value — a predicate like `city = "Sapporo"` means "does city equal
+/// the column named Sapporo", not "does city equal the text Sapporo".
+/// Detected by checking whether the *exact* missing name appears
+/// double-quoted in `original_sql` (the un-wrapped predicate/SQL the user
+/// actually typed, before any of this app's own internal wrapping).
+/// Deliberately does NOT fire for a bare, unquoted identifier (e.g. a
+/// genuinely misspelled column name like `citty = 'Tokyo'`) — that produces
+/// the exact same DuckDB message shape but is a different mistake, and
+/// "use single quotes" would be actively wrong advice there.
+///
+/// This *replaces* rather than appends to DuckDB's own message: appending a
+/// plain-language hint after "DuckDB error: Binder Error: ... Candidate
+/// bindings: ..." still buried the one useful sentence behind three lines
+/// of engine jargon (and an unhelpful candidate — "category" has nothing to
+/// do with "Sapporo", it's just DuckDB's nearest-name guess). When we're
+/// this confident about the cause, showing only the plain explanation is
+/// clearer than showing both.
+fn friendly_message_for_double_quoted_string(message: &str, original_sql: &str) -> Option<String> {
+    let name = column_not_found_name(message)?;
+    if !original_sql.contains(&format!("\"{name}\"")) {
+        return None;
+    }
+    Some(format!(
+        "\"{name}\" is being read as a column name, not text — for a text value, use single quotes: '{name}'"
+    ))
+}
+
+/// Runs `f` (whatever DuckDB call actually executes/binds `original_sql`),
+/// and if it fails, converts the error via the usual `CsvError::from`
+/// (which already strips the internal-SQL trailer — see
+/// `types::strip_location_trailer`), then — using the *original*,
+/// user-typed predicate/SQL as context that the generic
+/// `From<duckdb::Error>` conversion doesn't have access to — swaps in a
+/// `friendly_message_for_double_quoted_string` result when one applies.
+/// `CsvError::QueryError`, not `DuckDbError`, on that path: from the user's
+/// perspective this is "something about the query you wrote", not a
+/// mysterious backend failure, and `QueryError`'s `Invalid query: {message}`
+/// prefix is the same one the sql::validate gate's messages already use.
+fn run_with_quote_hint<T>(
+    original_sql: &str,
+    f: impl FnOnce() -> Result<T, duckdb::Error>,
+) -> Result<T, CsvError> {
+    f().map_err(|e| {
+        let err = CsvError::from(e);
+        let CsvError::DuckDbError(message) = &err else {
+            return err;
+        };
+        match friendly_message_for_double_quoted_string(message, original_sql) {
+            Some(message) => CsvError::QueryError {
+                message,
+                position: None,
+            },
+            None => err,
+        }
+    })
+}
+
 pub(crate) fn apply(session: &TabSession, req: &QueryRequest) -> Result<QueryOutcome, CsvError> {
     let start = Instant::now();
     let conn = session.conn.lock().unwrap();
@@ -276,7 +346,7 @@ pub(crate) fn apply(session: &TabSession, req: &QueryRequest) -> Result<QueryOut
         // filter further), `inner`'s `FROM csv_result` must still see the
         // old table while the new one is being computed. A `DROP` here
         // would destroy that source out from under the CTAS.
-        conn.execute_batch(&ctas)?;
+        run_with_quote_hint(&inner, || conn.execute_batch(&ctas))?;
 
         let raw_count: usize =
             conn.query_row(&format!("SELECT COUNT(*) FROM {RESULT_TABLE}"), [], |r| {
@@ -372,7 +442,7 @@ pub(crate) fn preview(
     // not affected by ROLLBACK.
     conn.execute_batch("BEGIN TRANSACTION")?;
     let result = (|| -> Result<QueryPreview, CsvError> {
-        let mut stmt = conn.prepare(&wrapped)?;
+        let mut stmt = run_with_quote_hint(&inner, || conn.prepare(&wrapped))?;
         let mut rows = stmt.query([])?;
         let raw_columns = rows
             .as_ref()
@@ -565,6 +635,99 @@ mod tests {
             .query_row("SELECT COUNT(*) FROM csv_data", [], |r| r.get(0))
             .unwrap();
         assert_eq!(count, 100);
+    }
+
+    #[test]
+    fn a_parser_error_message_has_no_internal_sql_leaking_through() {
+        // An unterminated quote is the worst case for leakage: the "at or
+        // near" snippet DuckDB echoes swallows everything from the unclosed
+        // quote to the end of the *wrapped* CTAS string, which is mostly
+        // our own internal syntax, not anything the user typed.
+        let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../test-data/small.csv");
+        let session = session_for(path);
+
+        let err = apply(&session, &where_req("city = \"Sapporo")).unwrap_err();
+        let CsvError::QueryError { message, .. } = err else {
+            panic!("expected QueryError, got {err:?}");
+        };
+        assert_eq!(message, "Parser Error: unterminated quoted identifier");
+        assert!(!message.contains("__row_id"));
+        assert!(!message.contains("csv_result"));
+        assert!(!message.contains("LIMIT"));
+    }
+
+    #[test]
+    fn a_binder_error_message_has_no_internal_sql_leaking_through() {
+        // A bare, unquoted, misspelled column reference — genuinely a
+        // Binder Error with no double-quote-mistake pattern to rewrite (see
+        // `a_double_quoted_column_not_found_gets_a_friendly_message` for
+        // that case, which now returns a different `CsvError` variant).
+        // This fails at execution, *not* at the sql::validate gate (it
+        // parses as valid SQL), so it exercises a different error path than
+        // the statement-separator rejection above — one that used to leak
+        // the fully wrapped CTAS (`__row_id`, `csv_result`,
+        // `LIMIT 1000001`, ...) into the message.
+        let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../test-data/small.csv");
+        let session = session_for(path);
+
+        let err = apply(&session, &where_req("citty = 'Tokyo'")).unwrap_err();
+        let CsvError::DuckDbError(message) = err else {
+            panic!("expected DuckDbError, got {err:?}");
+        };
+        assert!(message.contains("citty"));
+        assert!(!message.contains("__row_id"));
+        assert!(!message.contains("csv_result"));
+        assert!(!message.contains("LINE 1"));
+    }
+
+    #[test]
+    fn a_double_quoted_column_not_found_gets_a_friendly_message() {
+        let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../test-data/small.csv");
+        let session = session_for(path);
+
+        let err = apply(&session, &where_req("city = \"Sapporo\"")).unwrap_err();
+        // A `QueryError`, not `DuckDbError`: this replaces DuckDB's raw
+        // "Binder Error: ... Candidate bindings: ..." text entirely, it
+        // doesn't just append a hint after it (see
+        // `friendly_message_for_double_quoted_string`'s doc comment for why).
+        let CsvError::QueryError { message, .. } = err else {
+            panic!("expected QueryError, got {err:?}");
+        };
+        assert_eq!(
+            message,
+            "\"Sapporo\" is being read as a column name, not text — for a text value, use single quotes: 'Sapporo'"
+        );
+    }
+
+    #[test]
+    fn a_misspelled_bare_column_name_keeps_duckdbs_own_message() {
+        // `citty` (unquoted) produces the identical DuckDB message shape as
+        // the double-quoted case above, but it's a genuine typo of a column
+        // name, not a string-vs-identifier mix-up — the friendly rewrite
+        // would be wrong advice here, so DuckDB's own (already-clean, see
+        // `a_binder_error_message_has_no_internal_sql_leaking_through`)
+        // message is kept as-is.
+        let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../test-data/small.csv");
+        let session = session_for(path);
+
+        let err = apply(&session, &where_req("citty = 'Tokyo'")).unwrap_err();
+        let CsvError::DuckDbError(message) = err else {
+            panic!("expected DuckDbError, got {err:?}");
+        };
+        assert!(message.contains("citty"));
+        assert!(!message.contains("is being read as a column name"));
+    }
+
+    #[test]
+    fn preview_also_gets_the_friendly_message() {
+        let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../test-data/small.csv");
+        let session = session_for(path);
+
+        let err = preview(&session, &where_req("city = \"Sapporo\""), 1).unwrap_err();
+        let CsvError::QueryError { message, .. } = err else {
+            panic!("expected QueryError, got {err:?}");
+        };
+        assert!(message.contains("is being read as a column name"));
     }
 
     #[test]
