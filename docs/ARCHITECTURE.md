@@ -190,4 +190,4 @@ There is no `TitleBar` component: the window uses macOS's `titleBarStyle: "Trans
 | Memory (100k rows) | < 200 MB |
 | App startup | < 2 s |
 
-macOS 11 (Big Sur)+, Universal Binary (x86_64 + arm64), no network calls.
+macOS 11 (Big Sur)+ — pinned explicitly as `bundle.macOS.minimumSystemVersion` in `tauri.conf.json`, since Tauri's own default is 10.13 — Universal Binary (x86_64 + arm64), no network calls. WKWebView uses whatever WebKit the OS has installed rather than a bundled engine, so the real floor is Safari 16.4+ (required by the planned TailwindCSS v4 migration); it shipped to Big Sur in the March 2023 OS updates, so macOS 11 stays accurate for a patched system.

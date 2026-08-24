@@ -146,4 +146,4 @@ src-tauri/src/
 | Memory (100k rows) | < 200 MB |
 | App startup | < 2 s |
 
-macOS 11 (Big Sur)+, Universal Binary (x86_64 + arm64), no network calls.
+macOS 11 (Big Sur)+ (`bundle.macOS.minimumSystemVersion` in `tauri.conf.json`; Tauri's own default is 10.13), Universal Binary (x86_64 + arm64), no network calls. WKWebView follows the OS-installed WebKit, and the planned TailwindCSS v4 work needs Safari 16.4+ — which reached Big Sur in the March 2023 OS updates, so the macOS 11 floor holds as long as the OS is patched.
