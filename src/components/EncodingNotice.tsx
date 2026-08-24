@@ -28,7 +28,7 @@ export function EncodingNotice({
       <select
         value={selected}
         onChange={(e) => setSelected(e.target.value)}
-        className="text-xs px-1 py-0.5 border rounded"
+        className="text-xs px-1 py-0.5 border rounded-sm"
         style={{ background: "var(--col-bg)", borderColor: "var(--col-border)" }}
       >
         {ENCODING_OPTIONS.map((opt) => (

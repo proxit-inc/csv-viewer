@@ -26,14 +26,14 @@ export class ErrorBoundary extends Component<Props, State> {
             An error occurred
           </p>
           <pre
-            className="text-xs p-3 rounded max-w-lg overflow-auto"
+            className="text-xs p-3 rounded-sm max-w-lg overflow-auto"
             style={{ background: "var(--col-surface2)", color: "var(--col-text2)" }}
           >
             {this.state.error.message}
           </pre>
           <button
             onClick={() => this.setState({ error: null })}
-            className="px-3 py-1.5 text-xs rounded"
+            className="px-3 py-1.5 text-xs rounded-sm"
             style={{ background: "var(--col-accent)", color: "#fff" }}
           >
             Dismiss

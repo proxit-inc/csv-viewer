@@ -70,7 +70,7 @@ Queries can only read. `INSERT` / `UPDATE` / `DELETE` / `CREATE` are rejected, t
 
 ## Requirements
 
-- macOS 11 (Big Sur) or later
+- macOS 11 (Big Sur) or later, kept up to date — the UI needs the WebKit engine from Safari 16.4+, which shipped to Big Sur in the March 2023 OS updates
 - Intel or Apple Silicon (Universal Binary)
 
 ---

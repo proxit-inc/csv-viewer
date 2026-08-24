@@ -1,6 +1,32 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+/*
+  `source(none)` disables Tailwind v4's automatic source detection, which would
+  otherwise walk the whole project root and scan the Rust sources under
+  `src-tauri`, the CSV fixtures under `test-data`, and `docs`. The `@source`
+  rules below re-scope detection to exactly what the v3 `tailwind.config.js`
+  `content` array covered. Paths are relative to this file.
+*/
+@import "tailwindcss" source(none);
+
+@source "../index.html";
+@source "./**/*.{js,ts,jsx,tsx}";
+
+/*
+  The default border color has changed to `currentcolor` in Tailwind CSS v4,
+  so we've added these compatibility styles to make sure everything still
+  looks the same as it did with Tailwind CSS v3.
+
+  If we ever want to remove these styles, we need to add an explicit border
+  color utility to any element that depends on these defaults.
+*/
+@layer base {
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: var(--color-gray-200, currentcolor);
+  }
+}
 
 :root {
   /* Font */

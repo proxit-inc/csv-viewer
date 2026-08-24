@@ -244,7 +244,8 @@ rayon          = "1.8"   # 並列検索（Phase 1.4〜）
 | スクロールFPS | 60fps 維持 |
 | メモリ使用量（10万行） | 200MB 以内（DuckDB効果で削減） |
 | アプリ起動時間 | 2秒以内 |
-| 対応macOS | 11 (Big Sur) 以降 |
+| 対応macOS | 11 (Big Sur) 以降（`tauri.conf.json` の `bundle.macOS.minimumSystemVersion` で明示。Tauriの既定値は10.13） |
+| 必要WebKit | Safari 16.4 以降（TailwindCSS v4移行の前提）。WKWebViewはOS導入済みのWebKitに追従するが、Safari 16.4はBig Sur向けにも2023年3月のOSアップデートで配信済みのため、macOS 11の下限で問題ない |
 | アーキテクチャ | Intel (x86_64) + Apple Silicon (arm64) Universal Binary |
 | 外部通信 | なし（完全オフライン） |
 
