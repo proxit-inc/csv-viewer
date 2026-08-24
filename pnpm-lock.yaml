@@ -33,11 +33,11 @@ importers:
         specifier: ^2
         version: 2.7.2
       ag-grid-community:
-        specifier: ^31.0.0
-        version: 31.3.4
+        specifier: ^36.1.0
+        version: 36.1.0
       ag-grid-react:
-        specifier: ^31.0.0
-        version: 31.3.4(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+        specifier: ^36.1.0
+        version: 36.1.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       lucide-react:
         specifier: ^1.31.0
         version: 1.33.0(react@18.3.1)
@@ -1093,14 +1093,20 @@ packages:
   '@vitest/utils@4.1.10':
     resolution: {integrity: sha512-fy9am/HWxbaGt/Sawrp90vt6Y6jQwf1RX77cz3uwoJwJVMli/e1IEwRPnMNJ7vKfPTwo0diXifkpPvwH9v7nGA==}
 
-  ag-grid-community@31.3.4:
-    resolution: {integrity: sha512-jOxQO86C6eLnk1GdP24HB6aqaouFzMWizgfUwNY5MnetiWzz9ZaAmOGSnW/XBvdjXvC5Fpk3gSbvVKKQ7h9kBw==}
+  ag-charts-types@14.1.0:
+    resolution: {integrity: sha512-mmzkng88c0l+Z9PvCMowMilhVeNgDU/iMuMemcOQD4BG/qO4vbkxWvyQO0iqju8Dx7YOY81PNzC/RmElQNiVkA==}
 
-  ag-grid-react@31.3.4:
-    resolution: {integrity: sha512-WmPASHRFGSTxCMRStWG5bRtln0Ugsdqbb3+Y8sEyGHeLw4hXqfpqie3lT9kqCOl7wPWUjCpwmFdXzRnWPmyyeg==}
+  ag-grid-community@36.1.0:
+    resolution: {integrity: sha512-WnvSQ4csRs8gv/b1B0lPHykQXvUJVgi2u5mpY0Aa6dv3pvhDVVqCT8dwUyOeCog4JNPptaXGrOrZ8qP2XoJzVA==}
+
+  ag-grid-react@36.1.0:
+    resolution: {integrity: sha512-FNsmrOmr+taZY11sCA+6Ow0mKs2JqnmrjBrMjkKC2rVTXPARtks+tv+Ne4ZkLGGtvIMDlBFCDbSzFXVP0CdwXQ==}
     peerDependencies:
-      react: ^16.3.0 || ^17.0.0 || ^18.0.0
-      react-dom: ^16.3.0 || ^17.0.0 || ^18.0.0
+      react: ^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0
+      react-dom: ^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0
+
+  ag-stack@36.1.0:
+    resolution: {integrity: sha512-Kmkf5iRZmyduNx2KtW450j6GbCdJ4ejacSpb1AWl0yrdquRmScLRc1SlLolx6lyCbTBSJGo4tRraKbBzre+GlQ==}
 
   ansi-regex@5.0.1:
     resolution: {integrity: sha512-quJQXlTSUGL2LH9SUXo8VwsY4soanhgo6LNSm84E1LBcE8s3O0wpdiRzyR9z/ZZJMlMWv37qOOb9pdJlMUEKFQ==}
@@ -2466,14 +2472,21 @@ snapshots:
       convert-source-map: 2.0.0
       tinyrainbow: 3.1.0
 
-  ag-grid-community@31.3.4: {}
+  ag-charts-types@14.1.0: {}
 
-  ag-grid-react@31.3.4(react-dom@18.3.1(react@18.3.1))(react@18.3.1):
+  ag-grid-community@36.1.0:
     dependencies:
-      ag-grid-community: 31.3.4
+      ag-charts-types: 14.1.0
+      ag-stack: 36.1.0
+
+  ag-grid-react@36.1.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1):
+    dependencies:
+      ag-grid-community: 36.1.0
       prop-types: 15.8.1
       react: 18.3.1
       react-dom: 18.3.1(react@18.3.1)
+
+  ag-stack@36.1.0: {}
 
   ansi-regex@5.0.1: {}
 

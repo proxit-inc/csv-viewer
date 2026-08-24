@@ -1,10 +1,38 @@
 import { useMemo, useEffect, useRef } from "react";
 import { AgGridReact } from "ag-grid-react";
+import {
+  ModuleRegistry,
+  CellStyleModule,
+  ColumnApiModule,
+  InfiniteRowModelModule,
+  RenderApiModule,
+  ScrollApiModule,
+} from "ag-grid-community";
 import type { ColDef, GridReadyEvent, CellClassParams, SortChangedEvent } from "ag-grid-community";
 import "ag-grid-community/styles/ag-grid.css";
 import "ag-grid-community/styles/ag-theme-alpine.css";
 import type { SearchHit, SortSpec } from "../../types";
 import { createDatasource } from "./datasource";
+
+// AG-Grid v33+ made module registration mandatory: an unregistered feature is
+// simply absent at runtime (the grid renders nothing, or an api call is a
+// no-op) while `tsc`, `vite build` and any test that doesn't mount the grid all
+// stay green. Registering only what this file uses is deliberate — it is what
+// keeps the bundle ~30% smaller than the `AllCommunityModule` shortcut.
+//   InfiniteRowModelModule — `rowModelType="infinite"` below
+//   CellStyleModule        — the `cellStyle` entries in `columnDefs`
+//   ColumnApiModule        — `api.getColumnState()` in `handleSortChanged`
+//   RenderApiModule        — `api.refreshCells()` on search-hit changes
+//   ScrollApiModule        — `api.ensureIndexVisible()` / `api.getVerticalPixelRange()`
+// Adding an api call or grid option here may need another module; DataGrid.test.tsx
+// asserts console.error stays empty, which is where AG-Grid reports the failure.
+ModuleRegistry.registerModules([
+  InfiniteRowModelModule,
+  CellStyleModule,
+  ColumnApiModule,
+  RenderApiModule,
+  ScrollApiModule,
+]);
 
 // Stable reference: recreating this object on every render makes AG-Grid rebuild
 // all columns and discard user-resized widths (issue #7). Defined once at module scope.
@@ -180,7 +208,12 @@ export function DataGrid({
       // Restore by setting scrollTop directly — pixel-perfect, no row-index rounding.
       // requestAnimationFrame ensures the AG Grid viewport element is in the DOM.
       requestAnimationFrame(() => {
-        const vp = containerRef.current?.querySelector(".ag-body-viewport") as HTMLElement | null;
+        // `.ag-grid-viewport` is AG-Grid's scrollable element (`eGridViewport`,
+        // the one it reads/writes `scrollTop` on). It was `.ag-body-viewport`
+        // before v36 — see SCROLL_VIEWPORT_SELECTOR in DataGrid.test.tsx.
+        // Do not confuse it with the sibling-named `.ag-grid-scrolling-container`,
+        // which is only the inner row container and ignores `scrollTop`.
+        const vp = containerRef.current?.querySelector(".ag-grid-viewport") as HTMLElement | null;
         if (vp) vp.scrollTop = initialScrollOffset;
       });
     }
@@ -212,6 +245,10 @@ export function DataGrid({
     >
       <AgGridReact
         ref={gridRef}
+        // v33+ defaults to the Theming API, which would double-apply on top of
+        // the legacy `ag-grid.css` / `ag-theme-alpine.css` imported above.
+        // "legacy" keeps the CSS-file theming this component styles itself with.
+        theme="legacy"
         rowModelType="infinite"
         datasource={datasource}
         columnDefs={columnDefs}
