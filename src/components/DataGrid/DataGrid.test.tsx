@@ -38,8 +38,14 @@ vi.mock("@tauri-apps/api/core", () => ({ invoke: invokeMock }));
  * AG-Grid DOM detail, so a version upgrade can silently turn that lookup into
  * `null` and break scroll restoration without any type or build error.
  * Keep this string identical to the one in `DataGrid.tsx`'s `onGridReady`.
+ *
+ * Was `.ag-body-viewport` up to ag-grid v31; v36 renamed it. The right element
+ * is the one AG-Grid itself assigns `scrollTop` to (`eGridViewport` in its
+ * source) — NOT the similarly named `.ag-grid-scrolling-container`, which is
+ * the inner row container and would resolve non-null here while silently
+ * ignoring the `scrollTop` write.
  */
-const SCROLL_VIEWPORT_SELECTOR = ".ag-body-viewport";
+const SCROLL_VIEWPORT_SELECTOR = ".ag-grid-viewport";
 
 const COLUMNS = ["alpha", "beta"];
 
@@ -165,7 +171,7 @@ describe("DataGrid render smoke test", () => {
     );
   });
 
-  it("keeps the .ag-body-viewport scroll container resolvable", async () => {
+  it(`keeps the ${SCROLL_VIEWPORT_SELECTOR} scroll container resolvable`, async () => {
     // DataGrid.tsx restores a saved scroll offset by querying this exact
     // selector inside its own container. If an ag-grid upgrade renames or
     // restructures it, the query returns null and scroll restoration silently
@@ -179,6 +185,53 @@ describe("DataGrid render smoke test", () => {
       `DataGrid.tsx looks up "${SCROLL_VIEWPORT_SELECTOR}" for scroll save/restore; ag-grid no longer renders it`,
     ).not.toBeNull();
     expect(viewport).toBeInstanceOf(HTMLElement);
+
+    // Guards against pointing at an inner row container instead of the real
+    // scroller: the scrollable viewport must sit inside AG-Grid's root and wrap
+    // the rendered rows. (jsdom does no layout, so `overflow`/`scrollTop`
+    // themselves are not observable here — a real scroll check stays manual.)
+    expect(container.querySelector(".ag-root")?.contains(viewport!)).toBe(true);
+    await waitFor(() => {
+      expect(viewport!.querySelector(".ag-row")).not.toBeNull();
+    });
+  });
+
+  it("applies the search-hit cell highlight", async () => {
+    // Exercises the whole search-highlight path in one go, which is the only
+    // place three separately registered AG-Grid modules are used:
+    //   CellStyleModule — honours the `cellStyle` callback at all
+    //   RenderApiModule — `api.refreshCells()` re-runs it when hits change
+    //   ScrollApiModule — `api.ensureIndexVisible()` jumps to the current hit
+    // Unregister any of them and the styling never lands, with no type or
+    // build error to show for it.
+    const { container, rerender } = renderGrid();
+    await waitForGrid(container);
+    await waitFor(() => {
+      expect(container.querySelectorAll(".ag-cell").length).toBeGreaterThan(0);
+    });
+
+    rerender(
+      <DataGrid
+        columns={COLUMNS}
+        totalRows={2}
+        tabId="tab-1"
+        generation={0}
+        searchHits={[{ row: 1, column: 0 }]}
+        currentHitIndex={0}
+        onScrollSave={vi.fn()}
+        sort={[]}
+        onSortChange={vi.fn()}
+        onFetchStatus={vi.fn()}
+      />,
+    );
+
+    // "#FDE68A" is the current-hit background from DataGrid.tsx's cellStyle.
+    await waitFor(() => {
+      const highlighted = Array.from(container.querySelectorAll<HTMLElement>(".ag-cell")).filter(
+        (el) => el.style.backgroundColor === "rgb(253, 230, 138)",
+      );
+      expect(highlighted.map((el) => el.textContent)).toEqual(["a2"]);
+    });
   });
 
   it("calls onSortChange when a sortable column header is clicked", async () => {
