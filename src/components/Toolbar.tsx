@@ -28,7 +28,7 @@ export function Toolbar({
     >
       <button
         onClick={onOpen}
-        className="flex items-center gap-1.5 px-3 py-1.5 rounded text-sm font-medium hover:bg-white transition-colors"
+        className="flex items-center gap-1.5 px-3 py-1.5 rounded-sm text-sm font-medium hover:bg-white transition-colors"
         style={{ color: "var(--col-text)" }}
         title="Open file (⌘O)"
       >
@@ -41,7 +41,7 @@ export function Toolbar({
       <button
         onClick={onSearch}
         disabled={!hasFile}
-        className="flex items-center gap-1.5 px-3 py-1.5 rounded text-sm hover:bg-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+        className="flex items-center gap-1.5 px-3 py-1.5 rounded-sm text-sm hover:bg-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
         style={{ color: "var(--col-text)" }}
         title="Search (⌘F)"
       >
@@ -52,7 +52,7 @@ export function Toolbar({
       <button
         onClick={onClearSort}
         disabled={!hasSort}
-        className="flex items-center gap-1.5 px-3 py-1.5 rounded text-sm hover:bg-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+        className="flex items-center gap-1.5 px-3 py-1.5 rounded-sm text-sm hover:bg-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
         style={{ color: "var(--col-text)" }}
         title={hasSort ? "Clear sort" : "Sort — click a column header"}
       >
@@ -63,7 +63,7 @@ export function Toolbar({
       <button
         onClick={onFilter}
         disabled={!hasFile}
-        className="flex items-center gap-1.5 px-3 py-1.5 rounded text-sm hover:bg-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+        className="flex items-center gap-1.5 px-3 py-1.5 rounded-sm text-sm hover:bg-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
         style={{ color: "var(--col-text)" }}
         title="Filter"
       >

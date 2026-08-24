@@ -180,7 +180,7 @@ export function SearchBar({ tab, dispatch, onClose }: SearchBarProps) {
             <button
               key={m}
               onClick={() => dispatch({ type: "SEARCH_MODE_SET", payload: { tabId, mode: m } })}
-              className={`px-2 py-0.5 text-xs rounded ${mode === m ? "" : "hover:bg-black/10"}`}
+              className={`px-2 py-0.5 text-xs rounded-sm ${mode === m ? "" : "hover:bg-black/10"}`}
               style={{
                 background: mode === m ? "var(--col-accent)" : "transparent",
                 color: mode === m ? "#fff" : "var(--col-text2)",
@@ -206,7 +206,7 @@ export function SearchBar({ tab, dispatch, onClose }: SearchBarProps) {
             placeholder="Search..."
             autoCorrect="off"
             spellCheck={false}
-            className="flex-1 bg-transparent outline-none text-sm"
+            className="flex-1 bg-transparent outline-hidden text-sm"
             style={{ color: "var(--col-text)" }}
           />
         )}
@@ -236,7 +236,7 @@ export function SearchBar({ tab, dispatch, onClose }: SearchBarProps) {
                 }
               }}
               placeholder="amount > 1000 AND city LIKE '%Tokyo%'"
-              className="flex-1 bg-transparent outline-none text-sm"
+              className="flex-1 bg-transparent outline-hidden text-sm"
               style={{ color: "var(--col-text)", fontFamily: "var(--font-mono)" }}
             />
           </>
@@ -265,7 +265,7 @@ export function SearchBar({ tab, dispatch, onClose }: SearchBarProps) {
             <button
               onClick={() => navigate(-1)}
               disabled={hits.length === 0}
-              className="p-0.5 rounded hover:bg-black/10 disabled:opacity-40"
+              className="p-0.5 rounded-sm hover:bg-black/10 disabled:opacity-40"
               title="Previous (Shift+Enter)"
             >
               <ChevronUp size={14} />
@@ -273,7 +273,7 @@ export function SearchBar({ tab, dispatch, onClose }: SearchBarProps) {
             <button
               onClick={() => navigate(1)}
               disabled={hits.length === 0}
-              className="p-0.5 rounded hover:bg-black/10 disabled:opacity-40"
+              className="p-0.5 rounded-sm hover:bg-black/10 disabled:opacity-40"
               title="Next (Enter)"
             >
               <ChevronDown size={14} />
@@ -283,7 +283,7 @@ export function SearchBar({ tab, dispatch, onClose }: SearchBarProps) {
 
         <button
           onClick={onClose}
-          className="p-0.5 rounded hover:bg-black/10"
+          className="p-0.5 rounded-sm hover:bg-black/10"
           style={{ color: "var(--col-text2)" }}
           title="Close (Esc)"
         >
@@ -323,7 +323,7 @@ export function SearchBar({ tab, dispatch, onClose }: SearchBarProps) {
           <CopyButton text={queryStatus.message ?? ""} label="Copy error" />
           <button
             onClick={() => dispatch({ type: "QUERY_STATUS_CLEAR", payload: { tabId } })}
-            className="p-0.5 rounded hover:bg-black/10 shrink-0"
+            className="p-0.5 rounded-sm hover:bg-black/10 shrink-0"
             title="Dismiss"
           >
             <X size={12} />
