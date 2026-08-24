@@ -19,7 +19,7 @@ export function EmptyState({ onOpen }: EmptyStateProps) {
       </div>
       <button
         onClick={onOpen}
-        className="px-4 py-2 rounded text-sm font-medium text-white transition-colors"
+        className="px-4 py-2 rounded-sm text-sm font-medium text-white transition-colors"
         style={{ background: "var(--col-accent)" }}
         onMouseEnter={(e) => (e.currentTarget.style.background = "var(--col-accent-hover)")}
         onMouseLeave={(e) => (e.currentTarget.style.background = "var(--col-accent)")}

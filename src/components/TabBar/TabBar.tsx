@@ -40,7 +40,7 @@ export function TabBar({ tabs, activeTabId, onSwitch, onClose, onAdd }: TabBarPr
 
       <button
         onClick={onAdd}
-        className="flex items-center justify-center w-8 h-6 shrink-0 rounded hover:bg-black/10 transition-colors self-center ml-1"
+        className="flex items-center justify-center w-8 h-6 shrink-0 rounded-sm hover:bg-black/10 transition-colors self-center ml-1"
         style={{ color: "var(--col-text3)" }}
         title="Open new file"
       >
