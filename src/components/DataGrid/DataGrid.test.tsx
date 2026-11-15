@@ -49,6 +49,20 @@ const SCROLL_VIEWPORT_SELECTOR = ".ag-grid-viewport";
 
 const COLUMNS = ["alpha", "beta"];
 
+/**
+ * jsdom does no layout, so AG-Grid measures its viewport as 0px wide. Up to
+ * v36.2 a zero-width viewport switched column virtualisation off, so every
+ * column was rendered. v36.3 (ag-grid/ag-grid#14802) keeps virtualising a
+ * zero-width viewport whenever it detects a "real CSS engine" — and jsdom
+ * passes that probe (it resolves inherited custom properties), so any column
+ * starting more than 200px into the centre viewport is never rendered here.
+ *
+ * AG-Grid reads the width via `getComputedStyle(viewport).width`, which jsdom
+ * does resolve from stylesheets, so giving the viewport a desktop-sized width
+ * makes the grid lay its columns out as it would in the real window.
+ */
+let viewportWidthStyle: HTMLStyleElement;
+
 let consoleErrorSpy: ReturnType<typeof vi.spyOn>;
 
 beforeEach(() => {
@@ -62,6 +76,9 @@ beforeEach(() => {
     generation: 0,
     rowIds: null,
   });
+  viewportWidthStyle = document.createElement("style");
+  viewportWidthStyle.textContent = `${SCROLL_VIEWPORT_SELECTOR} { width: 1280px; }`;
+  document.head.appendChild(viewportWidthStyle);
   // Spy without replacing the implementation: anything AG-Grid or React logs is
   // still printed, and the call count stays assertable.
   consoleErrorSpy = vi.spyOn(console, "error");
@@ -69,6 +86,7 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup();
+  viewportWidthStyle.remove();
   consoleErrorSpy.mockRestore();
 });
 
