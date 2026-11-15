@@ -169,7 +169,7 @@ jobs:
   # macOS runners come with Xcode and need none of the Linux GTK/apt system deps.
   test-macos:
     name: Test (macOS)
-    runs-on: macos-14
+    runs-on: macos-15
     defaults:
       run:
         working-directory: src-tauri
